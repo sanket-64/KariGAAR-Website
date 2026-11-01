@@ -1,426 +1,323 @@
-import { useEffect, useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import {
+  Image,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import type { RouteProp } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
-import { useAuth } from '../context/AuthContext';
-import { useMarket } from '../context/MarketContext';
-import { Avatar } from '../components/Avatar';
-import { FormField } from '../components/FormField';
-import { colors, fonts, light } from '../theme';
+import { BackButton } from '../components/BackButton';
+import { BottomNavigation } from '../components/BottomNavigation';
+import { MarketplaceHeader } from '../components/MarketplaceHeader';
+import { ProductCard } from '../components/ProductCard';
+import { useMarketplace } from '../context/MarketplaceContext';
+import type { AppStackParamList } from '../navigation/types';
+import { colors, fonts, radius, shadow } from '../theme';
 
-interface Brand {
-  name: string;
-  tagline: string;
-  city: string;
-  bio: string;
-}
-
-const STORAGE_KEY = '@kaarigaar/creatorProfile';
-
-const DEFAULT_BRAND: Brand = {
-  name: 'KARIGAAR Studio',
-  tagline: 'Har Haath Ki Kahani, Aap Tak.',
-  city: 'Pune, Maharashtra',
-  bio: 'A small-batch handmade studio working with natural fibres, clay and gold-leaf detail. Every piece is made slowly, by hand.',
-};
+type CreatorProfileRouteProp = RouteProp<AppStackParamList, 'CreatorProfile'>;
 
 export function CreatorProfileScreen() {
-  const { user, signOut, chooseRole } = useAuth();
-  const { orders, customRequests, wishlist } = useMarket();
+  const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList>>();
+  const route = useRoute<CreatorProfileRouteProp>();
+  const { creatorId } = route.params;
 
-  const [brand, setBrand] = useState<Brand>(DEFAULT_BRAND);
-  const [editOpen, setEditOpen] = useState(false);
-  const [draft, setDraft] = useState<Brand>(brand);
-  const [switchOpen, setSwitchOpen] = useState(false);
-  const [switching, setSwitching] = useState(false);
-  const [push, setPush] = useState(true);
+  const { width } = useWindowDimensions();
+  const isDesktop = width >= 768;
 
-  useEffect(() => {
-    AsyncStorage.getItem(STORAGE_KEY)
-      .then((raw) => raw && setBrand({ ...DEFAULT_BRAND, ...JSON.parse(raw) }))
-      .catch(() => {});
-  }, []);
+  const { creators, products } = useMarketplace();
+  const creator = creators.find((c) => c.id === creatorId) || creators[0];
 
-  useEffect(() => {
-    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(brand)).catch(() => {});
-  }, [brand]);
-
-  const switchToCustomer = async () => {
-    if (switching) return;
-    setSwitching(true);
-    await chooseRole('customer');
-    setSwitching(false);
-  };
+  const creatorProducts = products.filter((p) => p.creatorId === creator.id);
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
-        <View style={styles.identity}>
-          <Avatar label={brand.name} size={84} />
-          <Text style={styles.brandName}>{brand.name}</Text>
-          <Text style={styles.tagline}>{brand.tagline}</Text>
-          <View style={styles.cityRow}>
-            <Ionicons name="location-outline" size={13} color={light.inkMuted} />
-            <Text style={styles.city}>{brand.city}</Text>
+      <MarketplaceHeader />
+
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        <View style={styles.container}>
+          {/* Back Row */}
+          <View style={styles.backRow}>
+            <BackButton label="Back to Marketplace" fallbackRoute="CustomerHome" />
           </View>
-          <Pressable
-            onPress={() => {
-              setDraft(brand);
-              setEditOpen(true);
-            }}
-            style={({ pressed }) => [styles.editBtn, pressed && { opacity: 0.85 }]}
-          >
-            <Ionicons name="create-outline" size={15} color={light.ink} />
-            <Text style={styles.editBtnText}>Edit Profile</Text>
-          </Pressable>
-        </View>
 
-        <View style={styles.stats}>
-          <Stat value={`₹${(orders.reduce((s, o) => s + o.total, 0) * 0.8).toLocaleString('en-IN')}`} label="Earnings" />
-          <Stat value={String(orders.length)} label="Orders" />
-          <Stat value={String(customRequests.length)} label="Requests" />
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>About</Text>
-          <Text style={styles.bio}>{brand.bio}</Text>
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Account</Text>
-          <Row label="Signed in as" value={user?.method === 'google' ? 'Google account' : (user?.identifier ?? '—')} />
-          <Row label="Saved products (wishlist)" value={String(wishlist.length)} />
-          <Row label="Notify me about orders" control={
-            <Switch
-              value={push}
-              onValueChange={setPush}
-              trackColor={{ true: 'rgba(212,163,89,0.6)', false: light.lineStrong }}
-              thumbColor={push ? '#A9823A' : light.surface}
+          {/* Banner Card */}
+          <View style={styles.profileBanner}>
+            <Image
+              source={{ uri: creator.workshopImage }}
+              style={styles.bannerImage}
+              resizeMode="cover"
             />
-          } />
-        </View>
+            <View style={styles.bannerOverlay} />
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Role</Text>
-          <Pressable
-            onPress={() => setSwitchOpen(true)}
-            style={({ pressed }) => [styles.menuRow, pressed && { backgroundColor: light.surfaceAlt }]}
-            accessibilityRole="button"
-          >
-            <View style={styles.menuLeft}>
-              <Ionicons name="swap-horizontal" size={19} color="#A9823A" />
-              <Text style={styles.menuLabel}>Switch to Customer</Text>
+            <View style={styles.bannerContent}>
+              <Image source={{ uri: creator.avatar }} style={styles.avatar} />
+              <View style={styles.bannerInfo}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Text style={styles.creatorName}>{creator.name}</Text>
+                  {creator.verified && (
+                    <Ionicons name="checkmark-circle" size={18} color={colors.goldBright} />
+                  )}
+                </View>
+                <Text style={styles.brandTitle}>{creator.brand}</Text>
+                <Text style={styles.locationTitle}>📍 {creator.location} • Member since {creator.joinedYear}</Text>
+              </View>
+
+              <Pressable
+                onPress={() => navigation.navigate('FindMyMaker')}
+                style={styles.commissionBtn}
+                accessibilityRole="button"
+              >
+                <Ionicons name="sparkles" size={15} color={colors.charcoal} />
+                <Text style={styles.commissionBtnText}>Request Custom Order</Text>
+              </Pressable>
             </View>
-            <Ionicons name="chevron-forward" size={17} color={light.inkFaint} />
-          </Pressable>
-        </View>
+          </View>
 
-        <Pressable
-          onPress={signOut}
-          style={({ pressed }) => [styles.logout, pressed && { opacity: 0.85 }]}
-          accessibilityRole="button"
-        >
-          <Ionicons name="log-out-outline" size={18} color={light.danger} />
-          <Text style={styles.logoutText}>Logout</Text>
-        </Pressable>
+          {/* Stats Bar */}
+          <View style={styles.statsBar}>
+            <View style={styles.statItem}>
+              <Text style={styles.statVal}>{creator.rating.toFixed(1)} ★</Text>
+              <Text style={styles.statLbl}>{creator.reviewCount} Reviews</Text>
+            </View>
+            <View style={styles.statDivider} />
+            <View style={styles.statItem}>
+              <Text style={styles.statVal}>{creator.completedCreations}+</Text>
+              <Text style={styles.statLbl}>Creations Delivered</Text>
+            </View>
+            <View style={styles.statDivider} />
+            <View style={styles.statItem}>
+              <Text style={styles.statVal}>Pune</Text>
+              <Text style={styles.statLbl}>{creator.locality} Atelier</Text>
+            </View>
+          </View>
+
+          {/* Artisan Story */}
+          <View style={styles.storyCard}>
+            <Text style={styles.storyCardTitle}>About the Artisan & Atelier</Text>
+            <Text style={styles.storyCardBody}>{creator.story}</Text>
+            <View style={styles.specialtiesRow}>
+              <Text style={styles.specialtiesLabel}>Specializations:</Text>
+              {creator.specialties.map((spec) => (
+                <View key={spec} style={styles.specChip}>
+                  <Text style={styles.specChipText}>{spec}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+
+          {/* Creator's Catalog */}
+          <View style={styles.catalogSection}>
+            <Text style={styles.catalogTitle}>Creations by {creator.name} ({creatorProducts.length})</Text>
+            <View style={styles.productGrid}>
+              {creatorProducts.map((p) => (
+                <View
+                  key={p.id}
+                  style={[styles.productGridItem, { width: isDesktop ? '23.5%' : '48%' }]}
+                >
+                  <ProductCard product={p} />
+                </View>
+              ))}
+            </View>
+          </View>
+        </View>
       </ScrollView>
 
-      {/* Edit brand modal */}
-      <Modal visible={editOpen} transparent animationType="fade" onRequestClose={() => setEditOpen(false)}>
-        <View style={styles.backdrop}>
-          <View style={styles.modal}>
-            <Text style={styles.modalTitle}>Edit Creator Profile</Text>
-            <FormField label="Studio Name" value={draft.name} onChangeText={(v) => setDraft({ ...draft, name: v })} />
-            <FormField label="Tagline" value={draft.tagline} onChangeText={(v) => setDraft({ ...draft, tagline: v })} />
-            <FormField label="City" value={draft.city} onChangeText={(v) => setDraft({ ...draft, city: v })} />
-            <FormField label="About" value={draft.bio} onChangeText={(v) => setDraft({ ...draft, bio: v })} multiline numberOfLines={4} />
-            <View style={styles.modalBtns}>
-              <Pressable onPress={() => setEditOpen(false)} style={styles.modalGhost}>
-                <Text style={styles.modalGhostText}>Cancel</Text>
-              </Pressable>
-              <Pressable
-                onPress={() => {
-                  setBrand(draft);
-                  setEditOpen(false);
-                }}
-                style={styles.modalGold}
-              >
-                <Text style={styles.modalGoldText}>Save</Text>
-              </Pressable>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Switch role modal */}
-      <Modal visible={switchOpen} transparent animationType="fade" onRequestClose={() => setSwitchOpen(false)}>
-        <View style={styles.backdrop}>
-          <View style={styles.modal}>
-            <View style={styles.switchIcon}>
-              <Ionicons name="person-outline" size={26} color="#A9823A" />
-            </View>
-            <Text style={styles.modalTitle}>Switch to Customer</Text>
-            <Text style={styles.modalBody}>
-              Browse and shop the marketplace as a customer. Your creator profile, earnings and
-              listings stay exactly as they are.
-            </Text>
-            <View style={styles.modalBtns}>
-              <Pressable onPress={() => setSwitchOpen(false)} style={styles.modalGhost}>
-                <Text style={styles.modalGhostText}>Cancel</Text>
-              </Pressable>
-              <Pressable
-                onPress={switchToCustomer}
-                disabled={switching}
-                style={[styles.modalGold, switching && { opacity: 0.6 }]}
-              >
-                <Text style={styles.modalGoldText}>{switching ? 'Switching…' : 'Switch Role'}</Text>
-              </Pressable>
-            </View>
-          </View>
-        </View>
-      </Modal>
+      <BottomNavigation activeTab="explore" />
     </SafeAreaView>
   );
 }
 
-function Stat({ value, label }: { value: string; label: string }) {
-  return (
-    <View style={styles.stat}>
-      <Text style={styles.statValue}>{value}</Text>
-      <Text style={styles.statLabel}>{label}</Text>
-    </View>
-  );
-}
-
-function Row({ label, value, control }: { label: string; value?: string; control?: React.ReactNode }) {
-  return (
-    <View style={styles.row}>
-      <Text style={styles.rowLabel}>{label}</Text>
-      {control ?? <Text style={styles.rowValue}>{value}</Text>}
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: light.bg },
-  scroll: { padding: 16, paddingBottom: 40 },
-  identity: {
-    alignItems: 'center',
-    gap: 6,
-    paddingVertical: 8,
-  },
-  brandName: {
-    color: light.ink,
-    fontFamily: fonts.serif.bold,
-    fontSize: 24,
-    marginTop: 6,
-  },
-  tagline: {
-    color: '#A9823A',
-    fontFamily: fonts.sans.medium,
-    fontSize: 13,
-    textAlign: 'center',
-  },
-  cityRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    marginTop: 2,
-  },
-  city: {
-    color: light.inkMuted,
-    fontFamily: fonts.sans.regular,
-    fontSize: 12.5,
-  },
-  editBtn: {
-    marginTop: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    height: 38,
-    paddingHorizontal: 16,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: light.lineStrong,
-    backgroundColor: light.surface,
-  },
-  editBtnText: {
-    color: light.ink,
-    fontFamily: fonts.sans.semibold,
-    fontSize: 13,
-  },
-  stats: {
-    flexDirection: 'row',
-    gap: 10,
-    marginTop: 20,
-  },
-  stat: {
+  safe: {
     flex: 1,
-    backgroundColor: light.surface,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: light.line,
-    paddingVertical: 16,
-    alignItems: 'center',
-    gap: 3,
+    backgroundColor: colors.marketplaceBg,
   },
-  statValue: {
-    color: light.ink,
-    fontFamily: fonts.serif.bold,
-    fontSize: 18,
+  scrollContent: {
+    flexGrow: 1,
+    paddingBottom: 48,
   },
-  statLabel: {
-    color: light.inkMuted,
-    fontFamily: fonts.sans.regular,
-    fontSize: 11.5,
-  },
-  section: {
-    marginTop: 22,
-    backgroundColor: light.surface,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: light.line,
-    paddingHorizontal: 16,
-    paddingTop: 14,
-    paddingBottom: 8,
-  },
-  sectionTitle: {
-    color: '#A9823A',
-    fontFamily: fonts.sans.semibold,
-    fontSize: 12,
-    letterSpacing: 1,
-    textTransform: 'uppercase',
-    marginBottom: 8,
-  },
-  bio: {
-    color: light.inkMuted,
-    fontFamily: fonts.sans.regular,
-    fontSize: 13.5,
-    lineHeight: 20,
-  },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 12,
-    borderTopWidth: 1,
-    borderTopColor: light.line,
-    gap: 16,
-  },
-  rowLabel: {
-    color: light.inkMuted,
-    fontFamily: fonts.sans.regular,
-    fontSize: 13.5,
-    flexShrink: 1,
-  },
-  rowValue: {
-    color: light.ink,
-    fontFamily: fonts.sans.semibold,
-    fontSize: 13.5,
-    textAlign: 'right',
-    flexShrink: 1,
-  },
-  menuRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 14,
-    borderTopWidth: 1,
-    borderTopColor: light.line,
-    borderRadius: 8,
-  },
-  menuLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  menuLabel: {
-    color: light.ink,
-    fontFamily: fonts.sans.medium,
-    fontSize: 14,
-  },
-  logout: {
-    marginTop: 24,
-    height: 50,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: 'rgba(192,82,56,0.4)',
-    backgroundColor: 'rgba(192,82,56,0.06)',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  },
-  logoutText: {
-    color: light.danger,
-    fontFamily: fonts.sans.semibold,
-    fontSize: 14.5,
-  },
-  backdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(20, 12, 6, 0.55)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  modal: {
+  container: {
+    maxWidth: 1280,
     width: '100%',
-    maxWidth: 420,
-    backgroundColor: light.surface,
-    borderRadius: 22,
-    borderWidth: 1,
-    borderColor: light.line,
-    padding: 22,
+    alignSelf: 'center',
+    paddingHorizontal: 16,
+    paddingTop: 16,
   },
-  modalTitle: {
-    color: light.ink,
-    fontFamily: fonts.serif.bold,
-    fontSize: 20,
-    textAlign: 'center',
-    marginBottom: 12,
-  },
-  modalBody: {
-    color: light.inkMuted,
-    fontFamily: fonts.sans.regular,
-    fontSize: 13.5,
-    lineHeight: 20,
-    textAlign: 'center',
+  backRow: {
+    alignSelf: 'flex-start',
     marginBottom: 16,
   },
-  modalBtns: {
+  profileBanner: {
+    height: 240,
+    borderRadius: radius.xl,
+    overflow: 'hidden',
+    position: 'relative',
+    marginBottom: 20,
+    ...shadow.medium,
+  },
+  bannerImage: {
+    width: '100%',
+    height: '100%',
+  },
+  bannerOverlay: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: 'rgba(26, 22, 19, 0.65)',
+  },
+  bannerContent: {
+    position: 'absolute',
+    bottom: 20,
+    left: 20,
+    right: 20,
     flexDirection: 'row',
-    gap: 10,
-    marginTop: 16,
+    flexWrap: 'wrap',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    gap: 16,
   },
-  modalGhost: {
+  avatar: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    borderWidth: 3,
+    borderColor: '#FFFFFF',
+  },
+  bannerInfo: {
     flex: 1,
-    height: 46,
-    borderRadius: 999,
+    minWidth: 200,
+  },
+  creatorName: {
+    fontFamily: fonts.serif.bold,
+    fontSize: 22,
+    color: '#FFFFFF',
+  },
+  brandTitle: {
+    fontFamily: fonts.sans.medium,
+    fontSize: 14,
+    color: colors.goldLight,
+    marginTop: 2,
+  },
+  locationTitle: {
+    fontFamily: fonts.sans.regular,
+    fontSize: 12.5,
+    color: colors.beige,
+    marginTop: 2,
+  },
+  commissionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: colors.gold,
+    paddingHorizontal: 16,
+    height: 40,
+    borderRadius: radius.full,
+    ...(Platform.OS === 'web' ? ({ cursor: 'pointer' } as never) : {}),
+  },
+  commissionBtnText: {
+    fontFamily: fonts.sans.semibold,
+    fontSize: 13,
+    color: colors.charcoal,
+  },
+  statsBar: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: radius.lg,
     borderWidth: 1,
-    borderColor: light.lineStrong,
+    borderColor: colors.cardBorder,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'space-around',
+    marginBottom: 24,
+    ...shadow.soft,
   },
-  modalGhostText: { color: light.ink, fontFamily: fonts.sans.semibold, fontSize: 14 },
-  modalGold: {
-    flex: 1,
-    height: 46,
-    borderRadius: 999,
-    backgroundColor: colors.goldGradientStart,
+  statItem: {
     alignItems: 'center',
-    justifyContent: 'center',
   },
-  modalGoldText: { color: colors.buttonText, fontFamily: fonts.sans.bold, fontSize: 14 },
-  switchIcon: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: 'rgba(212,163,89,0.16)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    alignSelf: 'center',
+  statVal: {
+    fontFamily: fonts.sans.bold,
+    fontSize: 18,
+    color: colors.charcoal,
+  },
+  statLbl: {
+    fontFamily: fonts.sans.regular,
+    fontSize: 12,
+    color: colors.textMuted,
+    marginTop: 2,
+  },
+  statDivider: {
+    width: 1,
+    height: 32,
+    backgroundColor: colors.cardBorder,
+  },
+  storyCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    padding: 24,
+    marginBottom: 32,
+    ...shadow.soft,
+  },
+  storyCardTitle: {
+    fontFamily: fonts.serif.bold,
+    fontSize: 18,
+    color: colors.charcoal,
     marginBottom: 10,
+  },
+  storyCardBody: {
+    fontFamily: fonts.sans.regular,
+    fontSize: 14,
+    lineHeight: 22,
+    color: colors.textSecondary,
+    marginBottom: 16,
+  },
+  specialtiesRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: 8,
+  },
+  specialtiesLabel: {
+    fontFamily: fonts.sans.semibold,
+    fontSize: 13,
+    color: colors.charcoal,
+  },
+  specChip: {
+    backgroundColor: colors.marketplaceBg,
+    borderRadius: radius.full,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+  },
+  specChipText: {
+    fontFamily: fonts.sans.medium,
+    fontSize: 12,
+    color: colors.textSecondary,
+  },
+  catalogSection: {
+    marginTop: 8,
+  },
+  catalogTitle: {
+    fontFamily: fonts.serif.bold,
+    fontSize: 22,
+    color: colors.charcoal,
+    marginBottom: 16,
+  },
+  productGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  productGridItem: {
+    marginBottom: 8,
   },
 });

@@ -1,506 +1,352 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { apiRequest, getStoredToken, setStoredToken } from '../services/api';
 
-export type Role = 'customer' | 'seller';
+import {
+  authService,
+  type AuthUser,
+  type DispatchedOtpNotification,
+  type RegisterCustomerParams,
+  type RegisterSellerParams,
+  type SellerProfileData,
+  type UserRole,
+} from '../services/authService';
+
+export type Role = UserRole;
+export type AuthMethod = 'phone' | 'email' | 'google';
+
+export interface UserProfile {
+  name: string;
+  email: string;
+  phone: string;
+  city: string;
+  locality: string;
+  avatarUrl?: string;
+}
 
 export interface User {
   id: string;
-  fullName: string;
+  identifier: string;
   email: string;
-  mobile: string;
+  phone: string;
+  method: AuthMethod;
   role: Role;
   roles: Role[];
-  profilePhoto?: string | null;
-  isEmailVerified: boolean;
-  isMobileVerified: boolean;
-  termsAccepted: boolean;
-  createdAt?: string;
-  identifier?: string;
-  method?: string;
+  profile: UserProfile;
+  sellerProfile?: SellerProfileData;
+  isVerified: boolean;
+  createdAt: number;
 }
 
-export interface CreatorProfile {
-  userId: string;
-  brandName: string;
-  tagline: string;
-  description: string;
-  categories: string[];
-  businessAddress: {
-    street: string;
-    city: string;
-    state: string;
-    pincode: string;
-  };
-  serviceArea: string;
-  bankDetails: {
-    accountHolder: string;
-    bankName: string;
-    accountNumber: string;
-    ifscCode: string;
-    upiId?: string;
-    isVerified: boolean;
-  };
-  taxDetails: {
-    panNumber: string;
-    gstin?: string;
-    artisanCardNumber?: string;
-    isCompliant: boolean;
-  };
-  profilePhoto?: string | null;
-  onboardingStep?: string;
-}
-
-export interface CustomerProfile {
-  userId: string;
-  addresses: Array<{
-    id: string;
-    label: string;
-    street: string;
-    city: string;
-    state: string;
-    pincode: string;
-    isDefault?: boolean;
-  }>;
-  preferences: {
-    favoriteCategories: string[];
-    newsletter: boolean;
-  };
-}
-
-export interface CustomerRegisterParams {
-  fullName: string;
-  email: string;
-  mobile: string;
-  password: string;
-  confirmPassword: string;
-  profilePhoto?: string | null;
-  termsAccepted: boolean;
-}
-
-export interface SellerRegisterParams {
+interface SignInParams {
+  identifier: string;
+  method: AuthMethod;
+  mode: 'signin' | 'signup';
   fullName?: string;
-  brandName: string;
-  email: string;
-  mobile: string;
-  password: string;
-  confirmPassword: string;
-  businessAddress: {
-    street: string;
-    city: string;
-    state: string;
-    pincode: string;
-  };
-  serviceArea: string;
-  categories: string[];
-  description: string;
-  profilePhoto?: string | null;
-  bankDetails?: {
-    accountHolder: string;
-    bankName: string;
-    accountNumber: string;
-    ifscCode: string;
-    upiId?: string;
-  };
-  taxDetails?: {
-    panNumber: string;
-    gstin?: string;
-    artisanCardNumber?: string;
-  };
-  termsAccepted: boolean;
 }
 
 interface AuthContextValue {
   hydrated: boolean;
   user: User | null;
-  creatorProfile: CreatorProfile | null;
-  customerProfile: CustomerProfile | null;
   activeRole: Role | null;
   roles: Role[];
-  token: string | null;
-  guestMode: boolean;
-  setGuestMode: (val: boolean) => void;
-  signIn: (identifier: string, password: string, rememberMe?: boolean) => Promise<{ user: User; role: Role }>;
-  registerCustomer: (params: CustomerRegisterParams) => Promise<{ user: User; token: string; otpPreview?: string }>;
-  registerSeller: (params: SellerRegisterParams) => Promise<{ user: User; token: string; creatorProfile: CreatorProfile; otpPreview?: string }>;
-  verifyOtp: (otp: string, identifier?: string) => Promise<User>;
-  resendOtp: (identifier?: string) => Promise<{ message: string; otpPreview?: string }>;
-  forgotPassword: (identifier: string) => Promise<{ message: string; resetTokenPreview?: string }>;
-  resetPassword: (params: { identifier: string; otp: string; newPassword: string; confirmPassword: string }) => Promise<void>;
-  signInWithGoogle: (roleChoice?: Role) => Promise<{ user: User; role: Role }>;
+  roleTransitioning: boolean;
+  pendingVerificationUser: AuthUser | null;
+  lastDispatchedOtp: DispatchedOtpNotification | null;
+  canAccessSellerFeatures: boolean;
+
+  // Modern production authentication
+  loginWithCredentials: (identifier: string, password: string) => Promise<{ success: boolean; user: AuthUser }>;
+  registerCustomer: (params: RegisterCustomerParams) => Promise<{ user: AuthUser; otp: string }>;
+  registerSeller: (params: RegisterSellerParams) => Promise<{ user: AuthUser; otp: string }>;
+  verifyOtp: (code: string) => Promise<boolean>;
+  resendOtp: () => Promise<string>;
+  requestPasswordReset: (identifier: string) => Promise<{ otp: string; target: string }>;
+  confirmPasswordReset: (identifier: string, otp: string, newPassword: string) => Promise<boolean>;
+  cancelVerification: () => void;
+  setPendingVerificationUser: (u: AuthUser | null) => void;
+
+  // Role and Navigation
   chooseRole: (role: Role) => Promise<void>;
+  switchRole: (role: Role) => Promise<void>;
+  updateProfile: (profile: Partial<UserProfile>) => Promise<void>;
   signOut: () => Promise<void>;
-  updateCustomerProfile: (data: Partial<CustomerProfile> & { fullName?: string }) => Promise<void>;
-  updateCreatorProfile: (data: Partial<CreatorProfile>) => Promise<void>;
-  savePayoutDetails: (bankDetails: CreatorProfile['bankDetails'], taxDetails?: CreatorProfile['taxDetails']) => Promise<void>;
-  refreshSession: () => Promise<void>;
+
+  // Backward compatibility
+  signIn: (params: SignInParams) => Promise<void>;
 }
 
 const STORAGE = {
   session: '@kaarigaar/session',
   roles: '@kaarigaar/roles',
   activeRole: '@kaarigaar/activeRole',
-  creatorProfile: '@kaarigaar/creatorProfile',
-  customerProfile: '@kaarigaar/customerProfile',
-  guestMode: '@kaarigaar/guestMode',
 } as const;
+
+function mapAuthUserToAppUser(authUser: AuthUser, method: AuthMethod = 'email'): User {
+  return {
+    id: authUser.id,
+    identifier: authUser.email || authUser.phone,
+    email: authUser.email,
+    phone: authUser.phone,
+    method,
+    role: authUser.role,
+    roles: authUser.roles || [authUser.role],
+    profile: {
+      name: authUser.fullName,
+      email: authUser.email,
+      phone: authUser.phone,
+      city: authUser.customerProfile?.city || authUser.sellerProfile?.serviceArea || 'Pune',
+      locality: authUser.customerProfile?.locality || 'Kothrud',
+      avatarUrl: authUser.avatarUrl,
+    },
+    sellerProfile: authUser.sellerProfile,
+    isVerified: authUser.isVerified,
+    createdAt: authUser.createdAt,
+  };
+}
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [hydrated, setHydrated] = useState(false);
   const [user, setUser] = useState<User | null>(null);
-  const [token, setToken] = useState<string | null>(null);
-  const [creatorProfile, setCreatorProfile] = useState<CreatorProfile | null>(null);
-  const [customerProfile, setCustomerProfile] = useState<CustomerProfile | null>(null);
   const [activeRole, setActiveRole] = useState<Role | null>(null);
   const [roles, setRoles] = useState<Role[]>([]);
-  const [guestMode, setGuestModeState] = useState<boolean>(false);
+  const [roleTransitioning, setRoleTransitioning] = useState(false);
+  const [pendingVerificationUser, setPendingVerificationUser] = useState<AuthUser | null>(null);
+  const [lastDispatchedOtp, setLastDispatchedOtp] = useState<DispatchedOtpNotification | null>(null);
 
-  // Restore stored session on mount
+  // Initialize and hydrate database & session
   useEffect(() => {
     (async () => {
       try {
-        const [savedToken, sessionRaw, rolesRaw, activeRaw, creatorRaw, customerRaw, guestRaw] = await Promise.all([
-          getStoredToken(),
-          AsyncStorage.getItem(STORAGE.session),
-          AsyncStorage.getItem(STORAGE.roles),
+        const seededUsers = await authService.init();
+
+        const [sessionUser, activeRaw, savedRolesRaw, lastOtp] = await Promise.all([
+          authService.getSession(),
           AsyncStorage.getItem(STORAGE.activeRole),
-          AsyncStorage.getItem(STORAGE.creatorProfile),
-          AsyncStorage.getItem(STORAGE.customerProfile),
-          AsyncStorage.getItem(STORAGE.guestMode),
+          AsyncStorage.getItem(STORAGE.roles),
+          authService.getLastDispatchedOtp(),
         ]);
 
-        if (savedToken) setToken(savedToken);
-        if (sessionRaw) setUser(JSON.parse(sessionRaw));
-        if (rolesRaw) setRoles(JSON.parse(rolesRaw));
-        if (activeRaw === 'customer' || activeRaw === 'seller') setActiveRole(activeRaw);
-        if (creatorRaw) setCreatorProfile(JSON.parse(creatorRaw));
-        if (customerRaw) setCustomerProfile(JSON.parse(customerRaw));
-        if (guestRaw === 'true') setGuestModeState(true);
+        const currentUser = sessionUser || seededUsers[0];
 
-        // If we have a token, verify live with backend `/me`
-        if (savedToken) {
-          try {
-            const data = await apiRequest<{
-              success: boolean;
-              user: User;
-              creatorProfile?: CreatorProfile;
-              customerProfile?: CustomerProfile;
-            }>('/auth/me', { token: savedToken });
+        if (currentUser) {
+          const mapped = mapAuthUserToAppUser(currentUser);
+          setUser(mapped);
+          setRoles(mapped.roles);
 
-            if (data.success && data.user) {
-              setUser(data.user);
-              setRoles(data.user.roles || [data.user.role]);
-              if (data.creatorProfile) setCreatorProfile(data.creatorProfile);
-              if (data.customerProfile) setCustomerProfile(data.customerProfile);
-            }
-          } catch {
-            // Server offline or token invalid - keep cached session for resilience
+          if (activeRaw === 'customer' || activeRaw === 'seller') {
+            setActiveRole(activeRaw);
+          } else {
+            setActiveRole(mapped.role || 'customer');
+          }
+        } else if (savedRolesRaw) {
+          setRoles(JSON.parse(savedRolesRaw));
+          if (activeRaw === 'customer' || activeRaw === 'seller') {
+            setActiveRole(activeRaw);
           }
         }
+
+        if (lastOtp) {
+          setLastDispatchedOtp(lastOtp);
+        }
       } catch (err) {
-        console.error('Session restoration error:', err);
+        console.warn('Auth initialization error:', err);
       } finally {
         setHydrated(true);
       }
     })();
   }, []);
 
-  const setGuestMode = async (val: boolean) => {
-    setGuestModeState(val);
-    if (val) {
-      await AsyncStorage.setItem(STORAGE.guestMode, 'true');
-    } else {
-      await AsyncStorage.removeItem(STORAGE.guestMode);
-    }
-  };
-
-  const handleAuthSuccess = async (
-    newUser: User,
-    newToken: string,
-    newCreatorProfile?: CreatorProfile | null,
-    newCustomerProfile?: CustomerProfile | null,
-    targetRole?: Role
-  ) => {
-    const userRoles = newUser.roles && newUser.roles.length > 0 ? newUser.roles : [newUser.role];
-    const roleToActivate = targetRole || (userRoles.includes('seller') ? 'seller' : 'customer');
-
-    await Promise.all([
-      setStoredToken(newToken),
-      AsyncStorage.setItem(STORAGE.session, JSON.stringify(newUser)),
-      AsyncStorage.setItem(STORAGE.roles, JSON.stringify(userRoles)),
-      AsyncStorage.setItem(STORAGE.activeRole, roleToActivate),
-      newCreatorProfile ? AsyncStorage.setItem(STORAGE.creatorProfile, JSON.stringify(newCreatorProfile)) : Promise.resolve(),
-      newCustomerProfile ? AsyncStorage.setItem(STORAGE.customerProfile, JSON.stringify(newCustomerProfile)) : Promise.resolve(),
-      AsyncStorage.removeItem(STORAGE.guestMode),
-    ]);
-
-    setToken(newToken);
-    setUser(newUser);
-    setRoles(userRoles);
-    setActiveRole(roleToActivate);
-    if (newCreatorProfile) setCreatorProfile(newCreatorProfile);
-    if (newCustomerProfile) setCustomerProfile(newCustomerProfile);
-    setGuestModeState(false);
-  };
+  const canAccessSellerFeatures = useMemo(() => {
+    if (!user) return false;
+    return user.roles.includes('seller') || user.role === 'seller';
+  }, [user]);
 
   const value = useMemo<AuthContextValue>(
     () => ({
       hydrated,
       user,
-      creatorProfile,
-      customerProfile,
       activeRole,
       roles,
-      token,
-      guestMode,
-      setGuestMode,
+      roleTransitioning,
+      pendingVerificationUser,
+      lastDispatchedOtp,
+      canAccessSellerFeatures,
 
-      async signIn(identifier: string, password: string, rememberMe = true) {
-        const res = await apiRequest<{
-          success: boolean;
-          token: string;
-          user: User;
-          creatorProfile?: CreatorProfile;
-          customerProfile?: CustomerProfile;
-        }>('/auth/login', {
-          method: 'POST',
-          body: JSON.stringify({ identifier, password }),
-        });
+      async loginWithCredentials(identifier: string, password: string) {
+        const authUser = await authService.login(identifier, password);
+        const mapped = mapAuthUserToAppUser(
+          authUser,
+          identifier.includes('@') ? 'email' : 'phone'
+        );
 
-        const targetRole: Role = res.user.role === 'seller' ? 'seller' : 'customer';
-        await handleAuthSuccess(res.user, res.token, res.creatorProfile, res.customerProfile, targetRole);
-        return { user: res.user, role: targetRole };
+        // If user is not verified, require verification
+        if (!authUser.isVerified) {
+          setPendingVerificationUser(authUser);
+          const otp = await authService.resendOtp(authUser.id);
+          const lastOtp = await authService.getLastDispatchedOtp();
+          setLastDispatchedOtp(lastOtp);
+          return { success: false, user: authUser };
+        }
+
+        setUser(mapped);
+        setRoles(mapped.roles);
+        const initialRole = mapped.role || (mapped.roles.includes('seller') ? 'seller' : 'customer');
+        setActiveRole(initialRole);
+        await Promise.all([
+          AsyncStorage.setItem(STORAGE.activeRole, initialRole),
+          AsyncStorage.setItem(STORAGE.roles, JSON.stringify(mapped.roles)),
+        ]);
+
+        return { success: true, user: authUser };
       },
 
-      async registerCustomer(params: CustomerRegisterParams) {
-        const res = await apiRequest<{
-          success: boolean;
-          token: string;
-          user: User;
-          otpPreview?: string;
-        }>('/auth/register/customer', {
-          method: 'POST',
-          body: JSON.stringify(params),
-        });
-
-        await handleAuthSuccess(res.user, res.token, null, null, 'customer');
-        return { user: res.user, token: res.token, otpPreview: res.otpPreview };
+      async registerCustomer(params: RegisterCustomerParams) {
+        const { user: registeredUser, otp } = await authService.registerCustomer(params);
+        setPendingVerificationUser(registeredUser);
+        const lastOtp = await authService.getLastDispatchedOtp();
+        setLastDispatchedOtp(lastOtp);
+        return { user: registeredUser, otp };
       },
 
-      async registerSeller(params: SellerRegisterParams) {
-        const res = await apiRequest<{
-          success: boolean;
-          token: string;
-          user: User;
-          creatorProfile: CreatorProfile;
-          otpPreview?: string;
-        }>('/auth/register/seller', {
-          method: 'POST',
-          body: JSON.stringify(params),
-        });
-
-        await handleAuthSuccess(res.user, res.token, res.creatorProfile, null, 'seller');
-        return {
-          user: res.user,
-          token: res.token,
-          creatorProfile: res.creatorProfile,
-          otpPreview: res.otpPreview,
-        };
+      async registerSeller(params: RegisterSellerParams) {
+        const { user: registeredUser, otp } = await authService.registerSeller(params);
+        setPendingVerificationUser(registeredUser);
+        const lastOtp = await authService.getLastDispatchedOtp();
+        setLastDispatchedOtp(lastOtp);
+        return { user: registeredUser, otp };
       },
 
-      async verifyOtp(otp: string, identifier?: string) {
-        const res = await apiRequest<{
-          success: boolean;
-          message: string;
-          user: User;
-        }>('/auth/verify-otp', {
-          method: 'POST',
-          body: JSON.stringify({
-            userId: user?.id,
-            identifier: identifier || user?.email || user?.mobile,
-            otp,
-          }),
-        });
+      async verifyOtp(code: string) {
+        if (!pendingVerificationUser) {
+          throw new Error('No registration or verification session in progress.');
+        }
 
-        const updated = { ...user, ...res.user, isEmailVerified: true, isMobileVerified: true };
-        setUser(updated);
-        await AsyncStorage.setItem(STORAGE.session, JSON.stringify(updated));
-        return updated;
+        const verifiedUser = await authService.verifyOtp(pendingVerificationUser.id, code);
+        const mapped = mapAuthUserToAppUser(verifiedUser);
+        setUser(mapped);
+        setRoles(mapped.roles);
+        setActiveRole(mapped.role);
+
+        await Promise.all([
+          AsyncStorage.setItem(STORAGE.activeRole, mapped.role),
+          AsyncStorage.setItem(STORAGE.roles, JSON.stringify(mapped.roles)),
+        ]);
+
+        setPendingVerificationUser(null);
+        return true;
       },
 
-      async resendOtp(identifier?: string) {
-        return await apiRequest<{
-          success: boolean;
-          message: string;
-          otpPreview?: string;
-        }>('/auth/resend-otp', {
-          method: 'POST',
-          body: JSON.stringify({
-            userId: user?.id,
-            identifier: identifier || user?.email || user?.mobile,
-          }),
-        });
+      async resendOtp() {
+        if (!pendingVerificationUser) {
+          throw new Error('No pending verification found.');
+        }
+        const newOtp = await authService.resendOtp(pendingVerificationUser.id);
+        const lastOtp = await authService.getLastDispatchedOtp();
+        setLastDispatchedOtp(lastOtp);
+        return newOtp;
       },
 
-      async forgotPassword(identifier: string) {
-        return await apiRequest<{
-          success: boolean;
-          message: string;
-          resetTokenPreview?: string;
-        }>('/auth/forgot-password', {
-          method: 'POST',
-          body: JSON.stringify({ identifier }),
-        });
+      async requestPasswordReset(identifier: string) {
+        const result = await authService.requestPasswordReset(identifier);
+        const lastOtp = await authService.getLastDispatchedOtp();
+        setLastDispatchedOtp(lastOtp);
+        return { otp: result.otp, target: result.target };
       },
 
-      async resetPassword(params) {
-        await apiRequest<{ success: boolean; message: string }>('/auth/reset-password', {
-          method: 'POST',
-          body: JSON.stringify(params),
-        });
+      async confirmPasswordReset(identifier: string, otp: string, newPassword: string) {
+        await authService.confirmPasswordReset(identifier, otp, newPassword);
+        return true;
       },
 
-      async signInWithGoogle(roleChoice = 'customer') {
-        const res = await apiRequest<{
-          success: boolean;
-          token: string;
-          user: User;
-          creatorProfile?: CreatorProfile;
-          customerProfile?: CustomerProfile;
-        }>('/auth/google', {
-          method: 'POST',
-          body: JSON.stringify({
-            roleChoice,
-            email: 'artisan.google@kaarigaar.in',
-            fullName: 'Google Craft Explorer',
-            profilePhoto: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80',
-          }),
-        });
+      cancelVerification() {
+        setPendingVerificationUser(null);
+      },
 
-        const targetRole: Role = roleChoice;
-        await handleAuthSuccess(res.user, res.token, res.creatorProfile, res.customerProfile, targetRole);
-        return { user: res.user, role: targetRole };
+      setPendingVerificationUser(u) {
+        setPendingVerificationUser(u);
       },
 
       async chooseRole(role: Role) {
-        // Guard: A pure customer without seller credentials must not access seller features
-        if (role === 'seller' && user && !roles.includes('seller')) {
-          // Add seller role to user account on server & client
-          try {
-            await apiRequest('/creator/profile', {
-              method: 'PUT',
-              body: JSON.stringify({
-                brandName: `${user.fullName}'s Studio`,
-                tagline: 'Har Haath Ki Kahani, Aap Tak.',
-                description: 'Handmade craft creator on KARIGAAR.',
-                categories: ['crochet', 'candles'],
-              }),
-            });
-          } catch {
-            // Allow fallback
-          }
-        }
-
         const nextRoles = roles.includes(role) ? roles : [...roles, role];
-        await Promise.all([
-          AsyncStorage.setItem(STORAGE.roles, JSON.stringify(nextRoles)),
-          AsyncStorage.setItem(STORAGE.activeRole, role),
-        ]);
+        await AsyncStorage.setItem(STORAGE.roles, JSON.stringify(nextRoles));
+        await AsyncStorage.setItem(STORAGE.activeRole, role);
         setRoles(nextRoles);
         setActiveRole(role);
       },
 
+      async switchRole(role: Role) {
+        setRoleTransitioning(true);
+        const nextRoles = roles.includes(role) ? roles : [...roles, role];
+        await AsyncStorage.setItem(STORAGE.roles, JSON.stringify(nextRoles));
+        await AsyncStorage.setItem(STORAGE.activeRole, role);
+        setRoles(nextRoles);
+        setActiveRole(role);
+        setTimeout(() => {
+          setRoleTransitioning(false);
+        }, 350);
+      },
+
+      async updateProfile(updates: Partial<UserProfile>) {
+        if (!user) return;
+        const updatedUser: User = {
+          ...user,
+          profile: {
+            ...user.profile,
+            ...updates,
+          },
+        };
+        await AsyncStorage.setItem(STORAGE.session, JSON.stringify(updatedUser));
+        setUser(updatedUser);
+      },
+
       async signOut() {
-        try {
-          await apiRequest('/auth/logout', { method: 'POST' });
-        } catch {
-          // ignore
-        }
-        await Promise.all([
-          setStoredToken(null),
-          AsyncStorage.removeItem(STORAGE.session),
-          AsyncStorage.removeItem(STORAGE.roles),
-          AsyncStorage.removeItem(STORAGE.activeRole),
-          AsyncStorage.removeItem(STORAGE.creatorProfile),
-          AsyncStorage.removeItem(STORAGE.customerProfile),
-          AsyncStorage.removeItem(STORAGE.guestMode),
-        ]);
-        setToken(null);
+        await authService.clearSession();
         setUser(null);
-        setRoles([]);
         setActiveRole(null);
-        setCreatorProfile(null);
-        setCustomerProfile(null);
-        setGuestModeState(false);
+        setRoles([]);
+        setPendingVerificationUser(null);
       },
 
-      async updateCustomerProfile(data) {
-        const res = await apiRequest<{
-          success: boolean;
-          user: User;
-          customerProfile: CustomerProfile;
-        }>('/user/profile', {
-          method: 'PUT',
-          body: JSON.stringify(data),
-        });
-        if (res.user) setUser(res.user);
-        if (res.customerProfile) {
-          setCustomerProfile(res.customerProfile);
-          await AsyncStorage.setItem(STORAGE.customerProfile, JSON.stringify(res.customerProfile));
+      // Legacy fallback (e.g. for Google Auth or quick test)
+      async signIn({ identifier, method, mode, fullName }) {
+        let authUser = await authService.findUserByIdentifier(identifier);
+        if (!authUser) {
+          const isPhone = !identifier.includes('@');
+          const cleanEmail = isPhone ? `${identifier}@kaarigaar.com` : identifier;
+          const cleanPhone = isPhone ? identifier : '9822045678';
+          const regResult = await authService.registerCustomer({
+            fullName: fullName || (method === 'google' ? 'Google Artisan Member' : 'KARIGAAR Member'),
+            email: cleanEmail,
+            phone: cleanPhone,
+            password: 'Password@123',
+            termsConsent: true,
+          });
+          authUser = regResult.user;
+          // Auto verify social
+          await authService.verifyOtp(authUser.id, regResult.otp);
         }
-      },
 
-      async updateCreatorProfile(data) {
-        const res = await apiRequest<{
-          success: boolean;
-          creatorProfile: CreatorProfile;
-        }>('/creator/profile', {
-          method: 'PUT',
-          body: JSON.stringify(data),
-        });
-        if (res.creatorProfile) {
-          setCreatorProfile(res.creatorProfile);
-          await AsyncStorage.setItem(STORAGE.creatorProfile, JSON.stringify(res.creatorProfile));
-        }
-      },
+        const mapped = mapAuthUserToAppUser(authUser, method);
+        setUser(mapped);
+        setRoles(mapped.roles);
 
-      async savePayoutDetails(bankDetails, taxDetails) {
-        const res = await apiRequest<{
-          success: boolean;
-          creatorProfile: CreatorProfile;
-        }>('/creator/payout-setup', {
-          method: 'POST',
-          body: JSON.stringify({ bankDetails, taxDetails }),
-        });
-        if (res.creatorProfile) {
-          setCreatorProfile(res.creatorProfile);
-          await AsyncStorage.setItem(STORAGE.creatorProfile, JSON.stringify(res.creatorProfile));
-        }
-      },
-
-      async refreshSession() {
-        const curToken = await getStoredToken();
-        if (!curToken) return;
-        try {
-          const res = await apiRequest<{
-            success: boolean;
-            user: User;
-            creatorProfile?: CreatorProfile;
-            customerProfile?: CustomerProfile;
-          }>('/auth/me');
-          if (res.success && res.user) {
-            setUser(res.user);
-            if (res.creatorProfile) setCreatorProfile(res.creatorProfile);
-            if (res.customerProfile) setCustomerProfile(res.customerProfile);
-          }
-        } catch {
-          // ignore
+        if (mode === 'signup') {
+          await Promise.all([
+            AsyncStorage.removeItem(STORAGE.roles),
+            AsyncStorage.removeItem(STORAGE.activeRole),
+          ]);
+          setRoles([]);
+          setActiveRole(null);
+        } else {
+          const preferredRole = mapped.role || 'customer';
+          await AsyncStorage.setItem(STORAGE.activeRole, preferredRole);
+          setActiveRole(preferredRole);
         }
       },
     }),
-    [hydrated, user, creatorProfile, customerProfile, activeRole, roles, token, guestMode],
+    [hydrated, user, activeRole, roles, roleTransitioning, pendingVerificationUser, lastDispatchedOtp, canAccessSellerFeatures],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

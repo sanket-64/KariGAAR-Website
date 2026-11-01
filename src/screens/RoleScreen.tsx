@@ -1,49 +1,61 @@
 import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  Image,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
 import { useAuth, type Role } from '../context/AuthContext';
-import { Badge } from '../components/Badge';
-import type { IconName } from '../data/categories';
-import { colors, fonts, light } from '../theme';
+import { colors, fonts, radius, shadow } from '../theme';
 
-interface Experience {
+const logoAsset = require('../../assets/kaarigaar_logo.png');
+
+interface RoleOption {
   role: Role;
-  icon: IconName;
-  title: string;
+  iconName: 'bag-handle-outline' | 'hammer-outline';
+  title: 'I’m a Customer' | 'I’m a Creator';
   description: string;
-  cta: string;
+  ctaText: string;
 }
 
-const EXPERIENCES: Experience[] = [
+const ROLES_DATA: RoleOption[] = [
   {
     role: 'customer',
-    icon: 'bag-handle-outline',
-    title: "I'm a Customer",
+    iconName: 'bag-handle-outline',
+    title: 'I’m a Customer',
     description:
       'Discover unique handmade products, find meaningful gifts, customize creations, and connect with makers.',
-    cta: 'Explore Handmade →',
+    ctaText: 'Explore Handmade →',
   },
   {
     role: 'seller',
-    icon: 'storefront-outline',
-    title: "I'm a Creator",
+    iconName: 'hammer-outline',
+    title: 'I’m a Creator',
     description:
       'Showcase your craft, receive custom orders, reach new customers, and grow your handmade business.',
-    cta: 'Start Creating →',
+    ctaText: 'Start Creating →',
   },
 ];
 
 export function RoleScreen() {
   const { chooseRole } = useAuth();
-  const [selected, setSelected] = useState<Role | null>(null);
-  const [busy, setBusy] = useState<Role | null>(null);
+  const [selectedRole, setSelectedRole] = useState<Role | null>(null);
+  const [loadingRole, setLoadingRole] = useState<Role | null>(null);
 
-  const handleContinue = async (role: Role) => {
-    if (busy) return;
-    setBusy(role);
-    await chooseRole(role);
+  const handleSelectAndProceed = async (role: Role) => {
+    setSelectedRole(role);
+    setLoadingRole(role);
+    try {
+      await chooseRole(role);
+    } finally {
+      setLoadingRole(null);
+    }
   };
 
   return (
@@ -51,65 +63,122 @@ export function RoleScreen() {
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
       >
-        <View style={styles.headingBlock}>
-          <Text style={styles.eyebrow}>KARIGAAR · कारीGaar</Text>
-          <Text style={styles.heading}>Welcome to KARIGAAR</Text>
-          <Text style={styles.subtitle}>Every creation has a story. How will you use KARIGAAR?</Text>
+        {/* Brand Header */}
+        <View style={styles.brandHeader}>
+          <View style={styles.logoEmblemContainer}>
+            <Image source={logoAsset} style={styles.logoEmblem} resizeMode="contain" />
+          </View>
+          <Text style={styles.brandTitle}>KARIGAAR</Text>
+          <Text style={styles.brandTagline}>Har Haath Ki Kahani</Text>
         </View>
 
-        <View style={styles.cards}>
-          {EXPERIENCES.map((item) => {
-            const isSelected = selected === item.role;
+        {/* Title and Subtitle Block */}
+        <View style={styles.headingsBlock}>
+          <Text style={styles.welcomeTitle}>Welcome to KARIGAAR</Text>
+          <Text style={styles.welcomeSubtitle}>
+            Every creation has a story. How will you use KARIGAAR?
+          </Text>
+          <View style={styles.roleEyebrowBadge}>
+            <Text style={styles.roleEyebrowText}>Choose your role</Text>
+          </View>
+        </View>
+
+        {/* Two Large Role Cards */}
+        <View style={styles.cardsContainer}>
+          {ROLES_DATA.map((item) => {
+            const isSelected = selectedRole === item.role;
+            const isLoading = loadingRole === item.role;
+
             return (
               <Pressable
                 key={item.role}
-                onPress={() => setSelected(item.role)}
+                onPress={() => handleSelectAndProceed(item.role)}
                 style={({ pressed }) => [
-                  styles.card,
-                  isSelected && styles.cardSelected,
-                  pressed && { opacity: 0.92 },
+                  styles.roleCard,
+                  isSelected ? styles.cardSelected : styles.cardUnselected,
+                  pressed && styles.cardPressed,
                 ]}
                 accessibilityRole="button"
-                accessibilityState={{ selected: isSelected }}
-                accessibilityLabel={item.title}
+                accessibilityLabel={`${item.title}: ${item.description}`}
               >
-                <View style={styles.cardHeader}>
-                  <View style={[styles.iconCircle, isSelected && styles.iconCircleSelected]}>
-                    <Ionicons name={item.icon} size={24} color={isSelected ? colors.goldBright : '#A9823A'} />
+                {/* Header row with Icon and Radio Check */}
+                <View style={styles.cardHeaderRow}>
+                  <View
+                    style={[
+                      styles.iconCircle,
+                      isSelected ? styles.iconCircleSelected : styles.iconCircleUnselected,
+                    ]}
+                  >
+                    <Ionicons
+                      name={item.iconName}
+                      size={24}
+                      color={isSelected ? colors.goldBright : colors.charcoal}
+                    />
                   </View>
-                  <Text style={[styles.cardTitle, isSelected && styles.textLight]}>
-                    {item.title}
-                  </Text>
-                  {isSelected ? <Badge text="Selected" tone="dark" /> : null}
+
+                  <View
+                    style={[
+                      styles.radioCircle,
+                      isSelected && styles.radioCircleSelected,
+                    ]}
+                  >
+                    {isSelected && (
+                      <Ionicons name="checkmark" size={14} color={colors.charcoal} />
+                    )}
+                  </View>
                 </View>
 
-                <Text style={[styles.cardBody, isSelected && styles.textLightMuted]}>
+                {/* Card Title & Description */}
+                <Text
+                  style={[
+                    styles.cardTitle,
+                    isSelected ? styles.cardTitleSelected : styles.cardTitleUnselected,
+                  ]}
+                >
+                  {item.title}
+                </Text>
+
+                <Text
+                  style={[
+                    styles.cardDescription,
+                    isSelected
+                      ? styles.cardDescriptionSelected
+                      : styles.cardDescriptionUnselected,
+                  ]}
+                >
                   {item.description}
                 </Text>
 
-                <Pressable
-                  onPress={() => handleContinue(item.role)}
-                  style={({ pressed }) => [
-                    styles.cta,
-                    isSelected && styles.ctaSelected,
-                    busy === item.role && { opacity: 0.6 },
-                    pressed && { opacity: 0.85 },
+                {/* Card CTA */}
+                <View
+                  style={[
+                    styles.cardCtaButton,
+                    isSelected
+                      ? styles.cardCtaButtonSelected
+                      : styles.cardCtaButtonUnselected,
                   ]}
-                  accessibilityRole="button"
-                  accessibilityLabel={item.cta}
                 >
-                  <Text style={[styles.ctaText, isSelected && styles.ctaTextSelected]}>
-                    {busy === item.role ? 'Setting up…' : item.cta}
+                  <Text
+                    style={[
+                      styles.cardCtaText,
+                      isSelected
+                        ? styles.cardCtaTextSelected
+                        : styles.cardCtaTextUnselected,
+                    ]}
+                  >
+                    {isLoading ? 'Loading experience…' : item.ctaText}
                   </Text>
-                </Pressable>
+                </View>
               </Pressable>
             );
           })}
         </View>
 
-        <Text style={styles.footnote}>Choose your role · Switch anytime from your profile</Text>
+        {/* Footer note */}
+        <Text style={styles.footerNote}>
+          You can switch between Customer and Creator roles anytime from your profile.
+        </Text>
       </ScrollView>
     </SafeAreaView>
   );
@@ -118,125 +187,202 @@ export function RoleScreen() {
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: light.bg,
+    backgroundColor: colors.marketplaceBg,
   },
   scrollContent: {
     flexGrow: 1,
-    justifyContent: 'center',
     paddingHorizontal: 20,
-    paddingVertical: 32,
-  },
-  headingBlock: {
-    alignItems: 'center',
-    marginBottom: 30,
-  },
-  eyebrow: {
-    color: '#A9823A',
-    fontFamily: fonts.sans.semibold,
-    fontSize: 11.5,
-    letterSpacing: 3,
-    marginBottom: 10,
-  },
-  heading: {
-    color: light.ink,
-    fontFamily: fonts.serif.bold,
-    fontSize: 30,
-    textAlign: 'center',
-  },
-  subtitle: {
-    color: light.inkMuted,
-    fontFamily: fonts.sans.regular,
-    fontSize: 14.5,
-    lineHeight: 21,
-    marginTop: 10,
-    textAlign: 'center',
-    maxWidth: 340,
-  },
-  cards: {
-    gap: 18,
-    maxWidth: 560,
+    paddingTop: 24,
+    paddingBottom: 40,
+    maxWidth: 720,
     width: '100%',
     alignSelf: 'center',
   },
-  card: {
-    backgroundColor: light.surface,
-    borderRadius: 20,
+  brandHeader: {
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  logoEmblemContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: colors.charcoal,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  logoEmblem: {
+    width: 32,
+    height: 32,
+  },
+  brandTitle: {
+    fontFamily: fonts.serif.bold,
+    fontSize: 20,
+    letterSpacing: 2.2,
+    color: colors.charcoal,
+  },
+  brandTagline: {
+    fontFamily: fonts.sans.medium,
+    fontSize: 11.5,
+    letterSpacing: 1.2,
+    color: colors.goldDeep,
+    marginTop: 2,
+  },
+  headingsBlock: {
+    alignItems: 'center',
+    marginBottom: 28,
+  },
+  welcomeTitle: {
+    fontFamily: fonts.serif.bold,
+    fontSize: 28,
+    lineHeight: 36,
+    color: colors.charcoal,
+    textAlign: 'center',
+  },
+  welcomeSubtitle: {
+    fontFamily: fonts.sans.regular,
+    fontSize: 14.5,
+    lineHeight: 22,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    marginTop: 8,
+    maxWidth: 480,
+  },
+  roleEyebrowBadge: {
+    marginTop: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: radius.full,
+    backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: light.lineStrong,
-    padding: 22,
-    gap: 14,
+    borderColor: colors.cardBorder,
+  },
+  roleEyebrowText: {
+    fontFamily: fonts.sans.semibold,
+    fontSize: 12,
+    letterSpacing: 1.2,
+    color: colors.goldDeep,
+    textTransform: 'uppercase',
+  },
+  cardsContainer: {
+    gap: 20,
+    width: '100%',
+  },
+  roleCard: {
+    borderRadius: radius.xl,
+    padding: 24,
+    width: '100%',
+    ...(Platform.OS === 'web'
+      ? ({
+          cursor: 'pointer',
+          transition: 'all 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
+        } as never)
+      : {}),
+  },
+  cardPressed: {
+    transform: [{ scale: 0.985 }],
   },
   cardSelected: {
-    borderColor: '#241A11',
-    backgroundColor: '#241A11',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 14 },
-    shadowOpacity: 0.22,
-    shadowRadius: 24,
-    elevation: 10,
+    backgroundColor: colors.charcoal,
+    borderWidth: 1.5,
+    borderColor: colors.gold,
+    ...shadow.card,
   },
-  cardHeader: {
+  cardUnselected: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    ...shadow.soft,
+  },
+  cardHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    justifyContent: 'space-between',
+    marginBottom: 16,
   },
   iconCircle: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    backgroundColor: 'rgba(212, 163, 89, 0.14)',
+    width: 50,
+    height: 50,
+    borderRadius: 25,
     alignItems: 'center',
     justifyContent: 'center',
   },
   iconCircleSelected: {
-    backgroundColor: 'rgba(212, 163, 89, 0.22)',
+    backgroundColor: 'rgba(212, 163, 89, 0.18)',
+    borderWidth: 1,
+    borderColor: colors.gold,
   },
-  cardTitle: {
-    flex: 1,
-    color: light.ink,
-    fontFamily: fonts.serif.semibold,
-    fontSize: 20,
+  iconCircleUnselected: {
+    backgroundColor: colors.marketplaceBg,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
   },
-  textLight: {
-    color: '#FFF8EC',
-  },
-  cardBody: {
-    color: light.inkMuted,
-    fontFamily: fonts.sans.regular,
-    fontSize: 14,
-    lineHeight: 21,
-  },
-  textLightMuted: {
-    color: 'rgba(255,248,236,0.72)',
-  },
-  cta: {
-    height: 50,
-    borderRadius: 14,
+  radioCircle: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    borderWidth: 1.5,
+    borderColor: colors.cardBorder,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  radioCircleSelected: {
+    backgroundColor: colors.gold,
+    borderColor: colors.goldBright,
+  },
+  cardTitle: {
+    fontFamily: fonts.serif.bold,
+    fontSize: 22,
+    marginBottom: 8,
+  },
+  cardTitleSelected: {
+    color: '#FFFFFF',
+  },
+  cardTitleUnselected: {
+    color: colors.charcoal,
+  },
+  cardDescription: {
+    fontFamily: fonts.sans.regular,
+    fontSize: 14,
+    lineHeight: 22,
+    marginBottom: 20,
+  },
+  cardDescriptionSelected: {
+    color: colors.beige,
+  },
+  cardDescriptionUnselected: {
+    color: colors.textSecondary,
+  },
+  cardCtaButton: {
+    height: 46,
+    borderRadius: radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cardCtaButtonSelected: {
+    backgroundColor: colors.gold,
+  },
+  cardCtaButtonUnselected: {
+    backgroundColor: colors.marketplaceBg,
     borderWidth: 1,
-    borderColor: 'rgba(212, 163, 89, 0.5)',
-    backgroundColor: 'rgba(212, 163, 89, 0.10)',
+    borderColor: colors.cardBorder,
   },
-  ctaSelected: {
-    backgroundColor: colors.goldGradientStart,
-    borderColor: colors.goldGradientStart,
-  },
-  ctaText: {
-    color: '#A9823A',
+  cardCtaText: {
     fontFamily: fonts.sans.semibold,
-    fontSize: 15,
+    fontSize: 14,
     letterSpacing: 0.3,
   },
-  ctaTextSelected: {
-    color: colors.buttonText,
+  cardCtaTextSelected: {
+    color: colors.charcoal,
   },
-  footnote: {
-    color: light.inkFaint,
+  cardCtaTextUnselected: {
+    color: colors.charcoal,
+  },
+  footerNote: {
     fontFamily: fonts.sans.regular,
     fontSize: 12.5,
+    color: colors.textMuted,
     textAlign: 'center',
-    marginTop: 26,
-    letterSpacing: 0.3,
+    marginTop: 28,
   },
 });

@@ -1,26 +1,30 @@
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
-import {
-  DefaultTheme,
-  NavigationContainer,
-  useNavigation,
-  type LinkingOptions,
-  type Theme,
-} from '@react-navigation/native';
-import { createNativeStackNavigator, type NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { useEffect } from 'react';
+import { DefaultTheme, NavigationContainer, type Theme } from '@react-navigation/native';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
 import { useAuth } from '../context/AuthContext';
-import { colors, light } from '../theme';
-import {
-  type AppStackParamList,
-  type AuthStackParamList,
-  type OnboardingStackParamList,
-  type RootParamList,
-} from './types';
-import { WelcomeScreen } from '../screens/WelcomeScreen';
+import { colors } from '../theme';
+import type { AppStackParamList, AuthStackParamList, OnboardingStackParamList } from './types';
+
+// Screens
+import { AddProductScreen } from '../screens/AddProductScreen';
+import { AdminDashboardScreen } from '../screens/AdminDashboardScreen';
+import { CartScreen } from '../screens/CartScreen';
+import { CategoryScreen } from '../screens/CategoryScreen';
+import { CheckoutScreen } from '../screens/CheckoutScreen';
+import { CreatorProfileScreen } from '../screens/CreatorProfileScreen';
+import { CustomerHomeScreen } from '../screens/CustomerHomeScreen';
+import { CustomizeScreen } from '../screens/CustomizeScreen';
+import { FindMyMakerScreen } from '../screens/FindMyMakerScreen';
+import { OrderDetailScreen } from '../screens/OrderDetailScreen';
+import { OrdersScreen } from '../screens/OrdersScreen';
+import { ProductDetailScreen } from '../screens/ProductDetailScreen';
+import { ProfileScreen } from '../screens/ProfileScreen';
 import { RoleScreen } from '../screens/RoleScreen';
-import { CustomerNavigator } from './CustomerNavigator';
-import { CreatorNavigator } from './CreatorNavigator';
+import { SellerDashboardScreen } from '../screens/SellerDashboardScreen';
+import { StoriesScreen } from '../screens/StoriesScreen';
+import { WelcomeScreen } from '../screens/WelcomeScreen';
+import { WishlistScreen } from '../screens/WishlistScreen';
 
 const AuthStack = createNativeStackNavigator<AuthStackParamList>();
 const OnboardingStack = createNativeStackNavigator<OnboardingStackParamList>();
@@ -28,72 +32,25 @@ const AppStack = createNativeStackNavigator<AppStackParamList>();
 
 const navTheme: Theme = {
   ...DefaultTheme,
-  dark: true,
+  dark: false,
   colors: {
     ...DefaultTheme.colors,
-    primary: colors.gold,
-    background: colors.background,
-    card: colors.background,
-    text: colors.cream,
-    border: colors.line,
-    notification: colors.gold,
+    primary: colors.charcoal,
+    background: colors.marketplaceBg,
+    card: '#FFFFFF',
+    text: colors.textPrimary,
+    border: colors.cardBorder,
+    notification: colors.terracotta,
   },
 };
 
-const darkStackOptions = {
+const stackScreenOptions = {
   headerShown: false,
-  contentStyle: { backgroundColor: colors.background },
+  contentStyle: { backgroundColor: colors.marketplaceBg },
 } as const;
 
-export const linking: LinkingOptions<RootParamList> = {
-  prefixes: [],
-  config: {
-    screens: {
-      Welcome: 'login',
-      ChooseRole: 'role-selection',
-      Customer: {
-        screens: {
-          Tabs: {
-            screens: {
-              HomeTab: 'home',
-              ExploreTab: 'explore',
-              CreateTab: 'create',
-              OrdersTab: 'my-orders',
-              ProfileTab: 'my-profile',
-            },
-          },
-          Category: 'category/:id',
-          Product: 'product/:id',
-          Creator: 'creator/:id',
-          Customize: 'customize/:id',
-          FindMyMaker: 'find-my-maker',
-          Stories: 'stories',
-          StoryDetail: 'stories/:id',
-          Cart: 'cart',
-          Checkout: 'checkout',
-          OrderDetail: 'orders/:orderId',
-          Wishlist: 'wishlist',
-          Settings: 'settings',
-        },
-      },
-      Creator: {
-        screens: {
-          Dashboard: 'creator',
-          Products: 'creator/products',
-          ProductNew: 'creator/products/new',
-          CreatorOrders: 'creator/orders',
-          CustomRequests: 'creator/custom-requests',
-          Messages: 'creator/messages',
-          Analytics: 'creator/analytics',
-          CreatorProfile: 'creator/profile',
-        },
-      },
-    },
-  },
-};
-
 export function RootNavigator() {
-  const { hydrated, user, activeRole, guestMode } = useAuth();
+  const { hydrated, user, activeRole } = useAuth();
 
   if (!hydrated) {
     return (
@@ -103,24 +60,21 @@ export function RootNavigator() {
     );
   }
 
-  const isGuest = guestMode && !user;
-
   return (
-    <NavigationContainer theme={navTheme} linking={linking}>
-      {!user && !isGuest ? (
-        <AuthFlow />
-      ) : !activeRole && !isGuest ? (
-        <OnboardingFlow />
-      ) : (
-        <AppFlow />
-      )}
+    <NavigationContainer theme={navTheme}>
+      {!user ? <AuthFlow /> : !activeRole ? <OnboardingFlow /> : <AppFlow />}
     </NavigationContainer>
   );
 }
 
 function AuthFlow() {
   return (
-    <AuthStack.Navigator screenOptions={darkStackOptions}>
+    <AuthStack.Navigator
+      screenOptions={{
+        headerShown: false,
+        contentStyle: { backgroundColor: colors.background },
+      }}
+    >
       <AuthStack.Screen name="Welcome" component={WelcomeScreen} />
     </AuthStack.Navigator>
   );
@@ -128,32 +82,40 @@ function AuthFlow() {
 
 function OnboardingFlow() {
   return (
-    <OnboardingStack.Navigator screenOptions={darkStackOptions}>
+    <OnboardingStack.Navigator screenOptions={stackScreenOptions}>
       <OnboardingStack.Screen name="ChooseRole" component={RoleScreen} />
     </OnboardingStack.Navigator>
   );
 }
 
 function AppFlow() {
-  const { activeRole, user } = useAuth();
-  const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList>>();
-  const effectiveRole = user ? activeRole : 'customer';
-
-  useEffect(() => {
-    if (effectiveRole === 'customer') {
-      navigation.reset({ index: 0, routes: [{ name: 'Customer' }] });
-    } else if (effectiveRole === 'seller') {
-      navigation.reset({ index: 0, routes: [{ name: 'Creator' }] });
-    }
-  }, [effectiveRole, navigation]);
+  const { activeRole } = useAuth();
+  const initial = activeRole === 'seller' ? 'SellerDashboard' : 'CustomerHome';
 
   return (
     <AppStack.Navigator
-      initialRouteName={effectiveRole === 'customer' ? 'Customer' : 'Creator'}
-      screenOptions={{ headerShown: false, contentStyle: { backgroundColor: light.bg } }}
+      initialRouteName={initial}
+      screenOptions={{ ...stackScreenOptions, animation: 'slide_from_right' }}
     >
-      <AppStack.Screen name="Customer" component={CustomerNavigator} />
-      <AppStack.Screen name="Creator" component={CreatorNavigator} />
+      {/* Customer Marketplace Screens */}
+      <AppStack.Screen name="CustomerHome" component={CustomerHomeScreen} />
+      <AppStack.Screen name="Category" component={CategoryScreen} />
+      <AppStack.Screen name="ProductDetail" component={ProductDetailScreen} />
+      <AppStack.Screen name="Customize" component={CustomizeScreen} />
+      <AppStack.Screen name="FindMyMaker" component={FindMyMakerScreen} />
+      <AppStack.Screen name="Stories" component={StoriesScreen} />
+      <AppStack.Screen name="Cart" component={CartScreen} />
+      <AppStack.Screen name="Checkout" component={CheckoutScreen} />
+      <AppStack.Screen name="Orders" component={OrdersScreen} />
+      <AppStack.Screen name="OrderDetail" component={OrderDetailScreen} />
+      <AppStack.Screen name="Wishlist" component={WishlistScreen} />
+      <AppStack.Screen name="Profile" component={ProfileScreen} />
+      <AppStack.Screen name="CreatorProfile" component={CreatorProfileScreen} />
+
+      {/* Creator & Admin Hub Screens */}
+      <AppStack.Screen name="SellerDashboard" component={SellerDashboardScreen} />
+      <AppStack.Screen name="AddProduct" component={AddProductScreen} />
+      <AppStack.Screen name="AdminDashboard" component={AdminDashboardScreen} />
     </AppStack.Navigator>
   );
 }
@@ -161,7 +123,7 @@ function AppFlow() {
 const styles = StyleSheet.create({
   loading: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: colors.marketplaceBg,
     alignItems: 'center',
     justifyContent: 'center',
   },

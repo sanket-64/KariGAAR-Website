@@ -41,7 +41,11 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`✨ KARIGAAR Backend Server running on http://localhost:${PORT}`);
-  console.log(`✨ API Health: http://localhost:${PORT}/api/health`);
-});
+if (require.main === module) {
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`✨ KARIGAAR Backend Server running on http://localhost:${PORT}`);
+    console.log(`✨ API Health: http://localhost:${PORT}/api/health`);
+  });
+}
+
+module.exports = app;

@@ -1,5 +1,3 @@
-import type { NavigatorScreenParams } from '@react-navigation/native';
-
 export type AuthStackParamList = {
   Welcome: undefined;
 };
@@ -8,46 +6,23 @@ export type OnboardingStackParamList = {
   ChooseRole: undefined;
 };
 
-export type CustomerTabParamList = {
-  HomeTab: undefined;
-  ExploreTab: { q?: string } | undefined;
-  CreateTab: undefined;
-  OrdersTab: undefined;
-  ProfileTab: undefined;
-};
-
-export type CustomerStackParamList = {
-  Tabs: NavigatorScreenParams<CustomerTabParamList>;
-  Category: { id: string };
-  Product: { id: string };
-  Creator: { id: string };
-  Customize: { id: string };
+export type AppStackParamList = {
+  CustomerHome: undefined;
+  Category: { categoryId: string; categoryName: string };
+  ProductDetail: { productId: string };
+  Customize: { productId: string };
   FindMyMaker: undefined;
   Stories: undefined;
-  StoryDetail: { id: string };
   Cart: undefined;
   Checkout: undefined;
+  Orders: undefined;
   OrderDetail: { orderId: string };
   Wishlist: undefined;
-  Settings: undefined;
+  Profile: undefined;
+  CreatorProfile: { creatorId: string };
+  SellerDashboard: undefined;
+  AddProduct: undefined;
+  AdminDashboard: undefined;
+  Welcome?: undefined;
+  ChooseRole?: undefined;
 };
-
-export type CreatorStackParamList = {
-  Dashboard: undefined;
-  Products: undefined;
-  ProductNew: undefined;
-  CreatorOrders: undefined;
-  CustomRequests: undefined;
-  Messages: undefined;
-  Analytics: undefined;
-  CreatorProfile: undefined;
-};
-
-export type AppStackParamList = {
-  Customer: NavigatorScreenParams<CustomerStackParamList>;
-  Creator: NavigatorScreenParams<CreatorStackParamList>;
-};
-
-export type RootParamList = AuthStackParamList &
-  OnboardingStackParamList &
-  AppStackParamList;

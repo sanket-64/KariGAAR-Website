@@ -1,390 +1,913 @@
 import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  Image,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  useWindowDimensions,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
+import type { RouteProp } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
-import { getProduct } from '../data/products';
-import { getCreator } from '../data/creators';
-import { PageHeader } from '../components/PageHeader';
-import { FormField } from '../components/FormField';
-import { QtyStepper } from '../components/QtyStepper';
-import { useMarket, type Customization } from '../context/MarketContext';
-import { colors, fonts, light } from '../theme';
-import type { CustomerStackParamList } from '../navigation/types';
+import { BackButton } from '../components/BackButton';
+import { BottomNavigation } from '../components/BottomNavigation';
+import { MarketplaceHeader } from '../components/MarketplaceHeader';
+import { useMarketplace } from '../context/MarketplaceContext';
+import type { AppStackParamList } from '../navigation/types';
+import { colors, fonts, radius, shadow } from '../theme';
 
-type Nav = NativeStackNavigationProp<CustomerStackParamList>;
-type Route = RouteProp<CustomerStackParamList, 'Customize'>;
+type CustomizeScreenRouteProp = RouteProp<AppStackParamList, 'Customize'>;
 
-function chips(options: string[], selected: string, onSelect: (v: string) => void) {
-  return (
-    <View style={styles.chipWrap}>
-      {options.map((o) => (
-        <Pressable
-          key={o}
-          onPress={() => onSelect(o)}
-          style={[styles.chip, selected === o && styles.chipActive]}
-        >
-          <Text style={[styles.chipText, selected === o && styles.chipTextActive]}>{o}</Text>
-        </Pressable>
-      ))}
-    </View>
-  );
-}
+const COLOR_OPTIONS = [
+  { name: 'Warm Mustard Gold', hex: '#D4A359', extra: 0 },
+  { name: 'Terracotta Earth', hex: '#C86D51', extra: 0 },
+  { name: 'Sage Leaf Green', hex: '#6A8E72', extra: 0 },
+  { name: 'Raw Natural Ivory', hex: '#FAF6F0', extra: 0 },
+  { name: 'Midnight Charcoal', hex: '#26221E', extra: 50 },
+  { name: 'Indigo Heritage', hex: '#3B4D61', extra: 50 },
+];
+
+const SIZE_OPTIONS = [
+  { label: 'Standard Compact', blurb: 'Ideal for desks & shelves', extra: 0 },
+  { label: 'Medium Classic (+₹120)', blurb: 'Most popular handcrafted size', extra: 120 },
+  { label: 'Grand Statement (+₹280)', blurb: 'Heirloom centerpiece', extra: 280 },
+];
+
+const MATERIAL_OPTIONS = [
+  { label: 'Organic Combed Cotton', extra: 0 },
+  { label: 'Merino Wool Blend (+₹80)', extra: 80 },
+  { label: 'Jute & Raw Silk Fibers (+₹150)', extra: 150 },
+];
+
+const PATTERN_OPTIONS = [
+  'Artisan Original Motif',
+  'Minimalist Botanical',
+  'Festive Intricate Weave',
+  'Geometric Folk Pattern',
+];
 
 export function CustomizeScreen() {
-  const navigation = useNavigation<Nav>();
-  const { id } = useRoute<Route>().params;
-  const { addCustomRequest, addToCart } = useMarket();
+  const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList>>();
+  const route = useRoute<CustomizeScreenRouteProp>();
+  const { productId } = route.params;
 
-  const product = getProduct(id);
-  const creator = getCreator(product.creatorId);
+  const { width } = useWindowDimensions();
+  const isDesktop = width >= 768;
 
-  const [name, setName] = useState('');
+  const { products, addToCart } = useMarketplace();
+  const product = products.find((p) => p.id === productId) || products[0];
+
+  // Customization Form State
+  const [customName, setCustomName] = useState('');
   const [initials, setInitials] = useState('');
-  const [message, setMessage] = useState('');
-  const [color, setColor] = useState(product.colors[0]);
-  const [size, setSize] = useState(product.sizes[0]);
-  const [material, setMaterial] = useState(product.materials[0]);
-  const [pattern, setPattern] = useState('Keep the signature style');
-  const [referenceNote, setReferenceNote] = useState('');
-  const [instructions, setInstructions] = useState('');
-  const [qty, setQty] = useState(1);
+  const [personalMessage, setPersonalMessage] = useState('');
+  const [selectedColor, setSelectedColor] = useState(COLOR_OPTIONS[0]);
+  const [selectedSize, setSelectedSize] = useState(SIZE_OPTIONS[0]);
+  const [selectedMaterial, setSelectedMaterial] = useState(MATERIAL_OPTIONS[0]);
+  const [selectedPattern, setSelectedPattern] = useState(PATTERN_OPTIONS[0]);
+  const [quantity, setQuantity] = useState(1);
+  const [specialInstructions, setSpecialInstructions] = useState('');
+  const [mockPhotoUploaded, setMockPhotoUploaded] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
-  const estimate = Math.round(product.price * 1.25 * qty);
-  const time = product.estimatedDays + 2;
+  // Price Calculation
+  const basePrice = product.price;
+  const customizationAddons =
+    selectedColor.extra +
+    selectedSize.extra +
+    selectedMaterial.extra +
+    (customName.trim() ? 50 : 0);
+  const unitPrice = basePrice + customizationAddons;
+  const totalPrice = unitPrice * quantity;
+  const estimatedDays = product.preparationDays + 2;
 
-  if (submitted) {
-    return (
-      <SafeAreaView style={styles.safe} edges={['top']}>
-        <View style={styles.success}>
-          <Ionicons name="checkmark-circle" size={64} color="#8B9B5A" />
-          <Text style={styles.successTitle}>Request Sent to {creator.name}</Text>
-          <Text style={styles.successBody}>
-            Your custom creation request for “{product.name}” is with the maker. They will
-            respond with a quote within ~{time} days.
-          </Text>
-          <View style={styles.successBtns}>
-            <Pressable
-              onPress={() => navigation.goBack()}
-              style={({ pressed }) => [styles.ghostBtn, pressed && { opacity: 0.85 }]}
-            >
-              <Text style={styles.ghostBtnText}>Back to Product</Text>
-            </Pressable>
-            <Pressable
-              onPress={() => navigation.navigate('Cart')}
-              style={({ pressed }) => [styles.goldBtn, pressed && { opacity: 0.85 }]}
-            >
-              <Text style={styles.goldBtnText}>View Cart</Text>
-            </Pressable>
-          </View>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  const customization: Customization = {
-    name,
-    initials,
-    message,
-    color,
-    size,
-    material,
-    pattern,
-    referenceNote,
-    instructions,
-  };
-
-  const handleRequest = () => {
-    addCustomRequest({
-      productId: product.id,
-      creatorId: creator.id,
-      customization,
-      qty,
-      budget: String(estimate),
+  const handleAddToCart = () => {
+    addToCart(product, quantity, {
+      customerName: customName.trim() || undefined,
+      initials: initials.trim() || undefined,
+      message: personalMessage.trim() || undefined,
+      color: selectedColor.name,
+      size: selectedSize.label,
+      material: selectedMaterial.label,
+      pattern: selectedPattern,
+      specialInstructions: specialInstructions.trim() || undefined,
+      hasReferenceImage: mockPhotoUploaded,
+      extraPrice: customizationAddons,
     });
+
     setSubmitted(true);
+    setTimeout(() => {
+      navigation.navigate('Cart');
+    }, 800);
   };
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
-      <PageHeader title="Customize This Creation" fallback={() => navigation.goBack()} />
+      <MarketplaceHeader />
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
-        <Text style={styles.productLine}>
-          {product.name} · by {creator.name}
-        </Text>
-
-        <FormField label="Name (to add on the creation)" value={name} onChangeText={setName} placeholder="e.g. Aarohi" />
-        <FormField label="Initials" value={initials} onChangeText={setInitials} placeholder="e.g. AV" maxLength={8} />
-        <FormField
-          label="Message on a gift tag" value={message} onChangeText={setMessage}
-          placeholder="Write something personal…" multiline />
-        <FormField label="Reference / inspiration note" value={referenceNote} onChangeText={setReferenceNote}
-          placeholder="Paste a description or Pinterest-style idea…" multiline />
-        <FormField label="Special instructions" value={instructions} onChangeText={setInstructions}
-          placeholder="Colours, packaging, delivery date…" multiline />
-
-        <MiniLabel text={`Colour · ${color}`} />
-        {chips(product.colors, color, setColor)}
-
-        <MiniLabel text={`Size · ${size}`} />
-        {chips(product.sizes, size, setSize)}
-
-        <MiniLabel text={`Material · ${material}`} />
-        {chips(product.materials, material, setMaterial)}
-
-        <MiniLabel text="Pattern / Style" />
-        {chips(['Signature style', 'Plain & minimal', 'Mixed tones'], pattern, setPattern)}
-
-        <View style={styles.qtyRow}>
-          <View>
-            <Text style={styles.qtyTitle}>Quantity</Text>
-            <Text style={styles.qtySub}>{qty === 1 ? 'Single piece' : `${qty} pieces`}</Text>
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        <View style={styles.container}>
+          {/* Back Row */}
+          <View style={styles.backRow}>
+            <BackButton label="Back to Product Details" fallbackRoute="CustomerHome" />
           </View>
-          <QtyStepper qty={qty} onChange={setQty} max={20} />
-        </View>
 
-        {/* Summary */}
-        <View style={styles.summary}>
-          <Text style={styles.summaryTitle}>Customization Summary</Text>
-          <Row label="Base price" value={`₹${product.price.toLocaleString('en-IN')}`} />
-          <Row label="Customization (+25%)" value={`+₹${Math.round(product.price * 0.25).toLocaleString('en-IN')}`} />
-          <Row label="Quantity" value={`× ${qty}`} />
-          <View style={styles.divider} />
-          <Row label="Estimated price" value={`₹${estimate.toLocaleString('en-IN')}`} strong />
-          <Row label="Estimated creation time" value={`~${time} days`} />
-        </View>
+          {/* Heading */}
+          <View style={styles.headingBlock}>
+            <View style={styles.sparkleBadge}>
+              <Ionicons name="sparkles" size={13} color={colors.goldBright} />
+              <Text style={styles.sparkleBadgeText}>BESPOKE ARTISAN WORKSHOP</Text>
+            </View>
+            <Text style={styles.mainTitle}>Customize This Creation</Text>
+            <Text style={styles.mainSubtitle}>
+              Personalize colors, engraved names, patterns, and materials. Handcrafted exclusively for you by {product.creatorName}.
+            </Text>
+          </View>
 
-        <Pressable
-          onPress={handleRequest}
-          style={({ pressed }) => [styles.requestBtn, pressed && { opacity: 0.88 }]}
-        >
-          <Text style={styles.requestBtnText}>Request Custom Creation</Text>
-        </Pressable>
-        <Pressable
-          onPress={() => {
-            addToCart(product.id, qty, customization);
-            navigation.navigate('Cart');
-          }}
-          style={({ pressed }) => [styles.cartBtn, pressed && { opacity: 0.85 }]}
-        >
-          <Text style={styles.cartBtnText}>Add this customization to Cart</Text>
-        </Pressable>
-        <Text style={styles.note}>
-          Requesting starts a conversation with the maker. Nothing is charged until the quote is accepted.
-        </Text>
+          {/* Product Preview Bar */}
+          <View style={styles.productBar}>
+            <Image source={{ uri: product.images[0] }} style={styles.productThumb} />
+            <View style={styles.productBarDetails}>
+              <Text style={styles.productBarCategory}>{product.category}</Text>
+              <Text style={styles.productBarName}>{product.name}</Text>
+              <Text style={styles.productBarMaker}>by {product.creatorName} ({product.creatorLocation})</Text>
+            </View>
+            <View style={styles.productBarPrice}>
+              <Text style={styles.barBasePriceLabel}>Base Price</Text>
+              <Text style={styles.barBasePriceVal}>₹{product.price}</Text>
+            </View>
+          </View>
+
+          {/* Layout: Options on Left, Live Summary on Right */}
+          <View style={[styles.bodyLayout, isDesktop && styles.bodyLayoutDesktop]}>
+            {/* Form Column */}
+            <View style={[styles.formColumn, isDesktop && { width: '62%' }]}>
+              {/* 1. Name & Inscription */}
+              <View style={styles.fieldSection}>
+                <Text style={styles.fieldSectionTitle}>1. Name & Inscription (Optional)</Text>
+                <Text style={styles.fieldSectionDesc}>
+                  Artisan will hand-stitch, embroider, or paint this onto your piece (+₹50).
+                </Text>
+
+                <View style={styles.inputRow}>
+                  <View style={{ flex: 2 }}>
+                    <Text style={styles.inputLabel}>Full Name or Custom Inscription</Text>
+                    <TextInput
+                      style={styles.textInput}
+                      placeholder="e.g. Ananya & Rohan"
+                      placeholderTextColor={colors.textMuted}
+                      value={customName}
+                      onChangeText={setCustomName}
+                    />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.inputLabel}>Initials</Text>
+                    <TextInput
+                      style={styles.textInput}
+                      placeholder="e.g. A & R"
+                      placeholderTextColor={colors.textMuted}
+                      value={initials}
+                      onChangeText={setInitials}
+                      maxLength={6}
+                    />
+                  </View>
+                </View>
+
+                <View style={{ marginTop: 12 }}>
+                  <Text style={styles.inputLabel}>Gift Message or Dedication Note</Text>
+                  <TextInput
+                    style={[styles.textInput, { height: 72 }]}
+                    placeholder="Included as a calligraphy card with your handcrafted package…"
+                    placeholderTextColor={colors.textMuted}
+                    value={personalMessage}
+                    onChangeText={setPersonalMessage}
+                    multiline
+                  />
+                </View>
+              </View>
+
+              {/* 2. Color Palette Selection */}
+              <View style={styles.fieldSection}>
+                <Text style={styles.fieldSectionTitle}>2. Choose Color Palette</Text>
+                <Text style={styles.fieldSectionDesc}>Select your preferred yarn, glaze, or pigment shade:</Text>
+                <View style={styles.colorSwatchesGrid}>
+                  {COLOR_OPTIONS.map((c) => {
+                    const isSelected = selectedColor.name === c.name;
+                    return (
+                      <Pressable
+                        key={c.name}
+                        onPress={() => setSelectedColor(c)}
+                        style={[
+                          styles.colorOptionCard,
+                          isSelected && styles.colorOptionCardSelected,
+                        ]}
+                      >
+                        <View
+                          style={[
+                            styles.colorCircle,
+                            { backgroundColor: c.hex },
+                            c.hex === '#FAF6F0' && { borderWidth: 1, borderColor: colors.cardBorder },
+                          ]}
+                        />
+                        <View>
+                          <Text style={styles.colorName}>{c.name}</Text>
+                          {c.extra > 0 && <Text style={styles.colorExtra}>+₹{c.extra}</Text>}
+                        </View>
+                        {isSelected && (
+                          <Ionicons
+                            name="checkmark-circle"
+                            size={16}
+                            color={colors.goldDeep}
+                            style={{ marginLeft: 'auto' }}
+                          />
+                        )}
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+
+              {/* 3. Size & Dimensions */}
+              <View style={styles.fieldSection}>
+                <Text style={styles.fieldSectionTitle}>3. Size & Scale</Text>
+                <View style={styles.optionsList}>
+                  {SIZE_OPTIONS.map((sz) => {
+                    const isSelected = selectedSize.label === sz.label;
+                    return (
+                      <Pressable
+                        key={sz.label}
+                        onPress={() => setSelectedSize(sz)}
+                        style={[
+                          styles.radioOptionRow,
+                          isSelected && styles.radioOptionRowSelected,
+                        ]}
+                      >
+                        <View style={[styles.radioCircle, isSelected && styles.radioCircleSelected]}>
+                          {isSelected && <View style={styles.radioInnerDot} />}
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.radioTitle}>{sz.label}</Text>
+                          <Text style={styles.radioBlurb}>{sz.blurb}</Text>
+                        </View>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+
+              {/* 4. Material Customization */}
+              <View style={styles.fieldSection}>
+                <Text style={styles.fieldSectionTitle}>4. Craft Material</Text>
+                <View style={styles.optionsList}>
+                  {MATERIAL_OPTIONS.map((mat) => {
+                    const isSelected = selectedMaterial.label === mat.label;
+                    return (
+                      <Pressable
+                        key={mat.label}
+                        onPress={() => setSelectedMaterial(mat)}
+                        style={[
+                          styles.radioOptionRow,
+                          isSelected && styles.radioOptionRowSelected,
+                        ]}
+                      >
+                        <View style={[styles.radioCircle, isSelected && styles.radioCircleSelected]}>
+                          {isSelected && <View style={styles.radioInnerDot} />}
+                        </View>
+                        <Text style={styles.radioTitle}>{mat.label}</Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+
+              {/* 5. Pattern / Style */}
+              <View style={styles.fieldSection}>
+                <Text style={styles.fieldSectionTitle}>5. Pattern & Theme</Text>
+                <View style={styles.patternPills}>
+                  {PATTERN_OPTIONS.map((pat) => {
+                    const isSelected = selectedPattern === pat;
+                    return (
+                      <Pressable
+                        key={pat}
+                        onPress={() => setSelectedPattern(pat)}
+                        style={[
+                          styles.patternPill,
+                          isSelected && styles.patternPillSelected,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.patternPillText,
+                            isSelected && styles.patternPillTextSelected,
+                          ]}
+                        >
+                          {pat}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+
+              {/* 6. Reference Photo Upload & Special Instructions */}
+              <View style={styles.fieldSection}>
+                <Text style={styles.fieldSectionTitle}>6. Reference Photo & Maker Notes</Text>
+                <Text style={styles.fieldSectionDesc}>
+                  Share a sample decor photo or specific color swatch for the maker:
+                </Text>
+
+                <Pressable
+                  onPress={() => setMockPhotoUploaded((p) => !p)}
+                  style={[
+                    styles.mockUploadBox,
+                    mockPhotoUploaded && styles.mockUploadBoxDone,
+                  ]}
+                >
+                  <Ionicons
+                    name={mockPhotoUploaded ? 'image' : 'cloud-upload-outline'}
+                    size={28}
+                    color={mockPhotoUploaded ? colors.ecoGreen : colors.gold}
+                  />
+                  <Text style={styles.uploadBoxText}>
+                    {mockPhotoUploaded
+                      ? '✓ Sample reference photo attached (my_room_palette.jpg)'
+                      : 'Tap to upload reference photo (decor, color matching, or inspiration)'}
+                  </Text>
+                  <Text style={styles.uploadBoxHint}>PNG, JPG up to 10MB</Text>
+                </Pressable>
+
+                <View style={{ marginTop: 16 }}>
+                  <Text style={styles.inputLabel}>Special Maker Instructions</Text>
+                  <TextInput
+                    style={[styles.textInput, { height: 80 }]}
+                    placeholder="e.g. Please make the sunflower petals slightly brighter yellow to match my balcony cushions…"
+                    placeholderTextColor={colors.textMuted}
+                    value={specialInstructions}
+                    onChangeText={setSpecialInstructions}
+                    multiline
+                  />
+                </View>
+              </View>
+            </View>
+
+            {/* Right Summary Column */}
+            <View style={[styles.summaryColumn, isDesktop && { width: '35%' }]}>
+              <View style={styles.summaryCard}>
+                <Text style={styles.summaryTitle}>Customization Summary</Text>
+
+                <View style={styles.summaryList}>
+                  <View style={styles.summaryItem}>
+                    <Text style={styles.summaryItemLabel}>Base Product:</Text>
+                    <Text style={styles.summaryItemVal}>₹{basePrice}</Text>
+                  </View>
+
+                  <View style={styles.summaryItem}>
+                    <Text style={styles.summaryItemLabel}>Color:</Text>
+                    <Text style={styles.summaryItemVal}>
+                      {selectedColor.name} {selectedColor.extra > 0 ? `(+₹${selectedColor.extra})` : ''}
+                    </Text>
+                  </View>
+
+                  <View style={styles.summaryItem}>
+                    <Text style={styles.summaryItemLabel}>Size:</Text>
+                    <Text style={styles.summaryItemVal}>{selectedSize.label}</Text>
+                  </View>
+
+                  <View style={styles.summaryItem}>
+                    <Text style={styles.summaryItemLabel}>Material:</Text>
+                    <Text style={styles.summaryItemVal}>{selectedMaterial.label}</Text>
+                  </View>
+
+                  <View style={styles.summaryItem}>
+                    <Text style={styles.summaryItemLabel}>Pattern:</Text>
+                    <Text style={styles.summaryItemVal}>{selectedPattern}</Text>
+                  </View>
+
+                  {customName.trim() ? (
+                    <View style={styles.summaryItem}>
+                      <Text style={styles.summaryItemLabel}>Engraved Name:</Text>
+                      <Text style={styles.summaryItemVal}>“{customName}” (+₹50)</Text>
+                    </View>
+                  ) : null}
+
+                  {mockPhotoUploaded ? (
+                    <View style={styles.summaryItem}>
+                      <Text style={styles.summaryItemLabel}>Photo Reference:</Text>
+                      <Text style={[styles.summaryItemVal, { color: colors.ecoGreen }]}>Attached ✓</Text>
+                    </View>
+                  ) : null}
+                </View>
+
+                {/* Crafting Time Note */}
+                <View style={styles.craftTimeBox}>
+                  <Ionicons name="time-outline" size={18} color={colors.gold} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.craftTimeTitle}>Estimated Creation Time</Text>
+                    <Text style={styles.craftTimeText}>
+                      {estimatedDays} to {estimatedDays + 2} days handcrafted by {product.creatorName}
+                    </Text>
+                  </View>
+                </View>
+
+                {/* Quantity */}
+                <View style={styles.summaryQuantityRow}>
+                  <Text style={styles.summaryQuantityLabel}>Quantity:</Text>
+                  <View style={styles.quantityControl}>
+                    <Pressable
+                      onPress={() => setQuantity((q) => Math.max(1, q - 1))}
+                      style={styles.qtyBtn}
+                    >
+                      <Ionicons name="remove" size={16} color={colors.charcoal} />
+                    </Pressable>
+                    <Text style={styles.qtyText}>{quantity}</Text>
+                    <Pressable
+                      onPress={() => setQuantity((q) => q + 1)}
+                      style={styles.qtyBtn}
+                    >
+                      <Ionicons name="add" size={16} color={colors.charcoal} />
+                    </Pressable>
+                  </View>
+                </View>
+
+                {/* Final Total */}
+                <View style={styles.summaryTotalRow}>
+                  <Text style={styles.summaryTotalLabel}>Total Price:</Text>
+                  <Text style={styles.summaryTotalValue}>₹{totalPrice}</Text>
+                </View>
+
+                {/* Request CTA */}
+                <Pressable
+                  onPress={handleAddToCart}
+                  style={({ pressed }) => [
+                    styles.submitCta,
+                    pressed && styles.submitCtaPressed,
+                  ]}
+                  accessibilityRole="button"
+                >
+                  <Ionicons name="sparkles" size={18} color="#FFFFFF" />
+                  <Text style={styles.submitCtaText}>
+                    {submitted ? 'Adding to Cart…' : 'Request Custom Creation'}
+                  </Text>
+                </Pressable>
+
+                <Text style={styles.satisfactionNote}>
+                  🛡️ Karigaar Artisan Guarantee: If the customized creation does not match your brief, free remake is guaranteed.
+                </Text>
+              </View>
+            </View>
+          </View>
+        </View>
       </ScrollView>
+
+      <BottomNavigation activeTab="explore" />
     </SafeAreaView>
   );
 }
 
-function Row({ label, value, strong = false }: { label: string; value: string; strong?: boolean }) {
-  return (
-    <View style={styles.row}>
-      <Text style={[styles.rowLabel, strong && styles.rowLabelStrong]}>{label}</Text>
-      <Text style={[styles.rowValue, strong && styles.rowValueStrong]}>{value}</Text>
-    </View>
-  );
-}
-
-function MiniLabel({ text }: { text: string }) {
-  return <Text style={styles.miniLabel}>{text}</Text>;
-}
-
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: light.bg },
-  scroll: { padding: 16, paddingBottom: 40 },
-  productLine: {
-    color: light.inkMuted,
+  safe: {
+    flex: 1,
+    backgroundColor: colors.marketplaceBg,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    paddingBottom: 48,
+  },
+  container: {
+    maxWidth: 1280,
+    width: '100%',
+    alignSelf: 'center',
+    paddingHorizontal: 16,
+    paddingTop: 16,
+  },
+  backRow: {
+    alignSelf: 'flex-start',
+    marginBottom: 16,
+  },
+  headingBlock: {
+    marginBottom: 20,
+  },
+  sparkleBadge: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#FFF8E8',
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: radius.full,
+    borderWidth: 1,
+    borderColor: colors.goldDim,
+    marginBottom: 10,
+  },
+  sparkleBadgeText: {
+    fontFamily: fonts.sans.bold,
+    fontSize: 10.5,
+    letterSpacing: 1.2,
+    color: colors.goldDeep,
+  },
+  mainTitle: {
+    fontFamily: fonts.serif.bold,
+    fontSize: 28,
+    color: colors.charcoal,
+  },
+  mainSubtitle: {
+    fontFamily: fonts.sans.regular,
+    fontSize: 14,
+    color: colors.textSecondary,
+    lineHeight: 22,
+    marginTop: 6,
+    maxWidth: 680,
+  },
+  productBar: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    padding: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    marginBottom: 24,
+    ...shadow.soft,
+  },
+  productThumb: {
+    width: 60,
+    height: 60,
+    borderRadius: radius.md,
+  },
+  productBarDetails: {
+    flex: 1,
+  },
+  productBarCategory: {
+    fontFamily: fonts.sans.bold,
+    fontSize: 10.5,
+    letterSpacing: 1,
+    color: colors.goldDeep,
+  },
+  productBarName: {
+    fontFamily: fonts.serif.bold,
+    fontSize: 16,
+    color: colors.charcoal,
+  },
+  productBarMaker: {
+    fontFamily: fonts.sans.regular,
+    fontSize: 12,
+    color: colors.textMuted,
+    marginTop: 2,
+  },
+  productBarPrice: {
+    alignItems: 'flex-end',
+  },
+  barBasePriceLabel: {
+    fontFamily: fonts.sans.regular,
+    fontSize: 11,
+    color: colors.textMuted,
+  },
+  barBasePriceVal: {
+    fontFamily: fonts.sans.bold,
+    fontSize: 18,
+    color: colors.charcoal,
+  },
+  bodyLayout: {
+    flexDirection: 'column',
+    gap: 24,
+  },
+  bodyLayoutDesktop: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 32,
+  },
+  formColumn: {
+    gap: 20,
+  },
+  fieldSection: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    padding: 20,
+    ...shadow.soft,
+  },
+  fieldSectionTitle: {
+    fontFamily: fonts.serif.bold,
+    fontSize: 18,
+    color: colors.charcoal,
+    marginBottom: 4,
+  },
+  fieldSectionDesc: {
     fontFamily: fonts.sans.regular,
     fontSize: 13,
-    marginBottom: 12,
+    color: colors.textSecondary,
+    marginBottom: 16,
+    lineHeight: 18,
   },
-  miniLabel: {
-    color: light.inkMuted,
-    fontFamily: fonts.sans.semibold,
-    fontSize: 12,
-    letterSpacing: 0.4,
-    marginTop: 16,
+  inputRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  inputLabel: {
+    fontFamily: fonts.sans.medium,
+    fontSize: 12.5,
+    color: colors.charcoal,
     marginBottom: 6,
   },
-  chipWrap: {
+  textInput: {
+    backgroundColor: colors.marketplaceBg,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontFamily: fonts.sans.regular,
+    fontSize: 13.5,
+    color: colors.textPrimary,
+    outlineWidth: 0,
+  },
+  colorSwatchesGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  colorOptionCard: {
+    width: Platform.OS === 'web' ? '48%' : '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 10,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    backgroundColor: colors.marketplaceBg,
+    ...(Platform.OS === 'web' ? ({ cursor: 'pointer' } as never) : {}),
+  },
+  colorOptionCardSelected: {
+    borderColor: colors.gold,
+    backgroundColor: '#FFFDF9',
+  },
+  colorCircle: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+  },
+  colorName: {
+    fontFamily: fonts.sans.medium,
+    fontSize: 12.5,
+    color: colors.charcoal,
+  },
+  colorExtra: {
+    fontFamily: fonts.sans.bold,
+    fontSize: 11,
+    color: colors.goldDeep,
+  },
+  optionsList: {
+    gap: 10,
+  },
+  radioOptionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 12,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    backgroundColor: colors.marketplaceBg,
+    ...(Platform.OS === 'web' ? ({ cursor: 'pointer' } as never) : {}),
+  },
+  radioOptionRowSelected: {
+    borderColor: colors.gold,
+    backgroundColor: '#FFFDF9',
+  },
+  radioCircle: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: colors.cardBorder,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  radioCircleSelected: {
+    borderColor: colors.gold,
+  },
+  radioInnerDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: colors.gold,
+  },
+  radioTitle: {
+    fontFamily: fonts.sans.medium,
+    fontSize: 13.5,
+    color: colors.charcoal,
+  },
+  radioBlurb: {
+    fontFamily: fonts.sans.regular,
+    fontSize: 12,
+    color: colors.textMuted,
+    marginTop: 2,
+  },
+  patternPills: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
   },
-  chip: {
-    paddingHorizontal: 13,
-    height: 34,
-    borderRadius: 999,
+  patternPill: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: radius.full,
     borderWidth: 1,
-    borderColor: light.lineStrong,
-    backgroundColor: light.surface,
-    alignItems: 'center',
-    justifyContent: 'center',
+    borderColor: colors.cardBorder,
+    backgroundColor: colors.marketplaceBg,
+    ...(Platform.OS === 'web' ? ({ cursor: 'pointer' } as never) : {}),
   },
-  chipActive: {
-    backgroundColor: '#2E1B10',
-    borderColor: '#2E1B10',
+  patternPillSelected: {
+    backgroundColor: colors.charcoal,
+    borderColor: colors.charcoal,
   },
-  chipText: {
-    color: light.inkMuted,
+  patternPillText: {
     fontFamily: fonts.sans.medium,
     fontSize: 12.5,
+    color: colors.textSecondary,
   },
-  chipTextActive: {
-    color: '#FFF8EC',
+  patternPillTextSelected: {
+    color: '#FFFFFF',
   },
-  qtyRow: {
-    flexDirection: 'row',
+  mockUploadBox: {
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderColor: colors.goldDim,
+    borderRadius: radius.lg,
+    padding: 20,
     alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: 20,
-    backgroundColor: light.surfaceAlt,
-    borderRadius: 14,
-    padding: 14,
+    justifyContent: 'center',
+    backgroundColor: colors.marketplaceBg,
+    ...(Platform.OS === 'web' ? ({ cursor: 'pointer' } as never) : {}),
   },
-  qtyTitle: {
-    color: light.ink,
-    fontFamily: fonts.sans.semibold,
-    fontSize: 14,
+  mockUploadBoxDone: {
+    borderColor: colors.ecoGreen,
+    backgroundColor: '#F3FAF4',
   },
-  qtySub: {
-    color: light.inkMuted,
-    fontFamily: fonts.sans.regular,
-    fontSize: 12,
-  },
-  summary: {
-    marginTop: 20,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: 'rgba(212, 163, 89, 0.35)',
-    backgroundColor: light.surface,
-    padding: 16,
-    gap: 10,
-  },
-  summaryTitle: {
-    color: '#A9823A',
-    fontFamily: fonts.serif.semibold,
-    fontSize: 16,
-    marginBottom: 2,
-  },
-  row: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  rowLabel: {
-    color: light.inkMuted,
-    fontFamily: fonts.sans.regular,
-    fontSize: 13,
-  },
-  rowLabelStrong: {
-    color: light.ink,
-    fontFamily: fonts.sans.semibold,
-  },
-  rowValue: {
-    color: light.ink,
+  uploadBoxText: {
     fontFamily: fonts.sans.medium,
     fontSize: 13,
-  },
-  rowValueStrong: {
-    fontFamily: fonts.sans.bold,
-    color: '#A9823A',
-  },
-  divider: {
-    height: 1,
-    backgroundColor: light.line,
-  },
-  requestBtn: {
-    marginTop: 20,
-    height: 52,
-    borderRadius: 999,
-    backgroundColor: colors.goldGradientStart,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  requestBtnText: {
-    color: colors.buttonText,
-    fontFamily: fonts.sans.bold,
-    fontSize: 15,
-    letterSpacing: 0.3,
-  },
-  cartBtn: {
-    marginTop: 10,
-    height: 50,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: 'rgba(212, 163, 89, 0.5)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  cartBtnText: {
-    color: '#A9823A',
-    fontFamily: fonts.sans.semibold,
-    fontSize: 14,
-  },
-  note: {
-    color: light.inkFaint,
-    fontFamily: fonts.sans.regular,
-    fontSize: 11.5,
-    lineHeight: 17,
-    marginTop: 12,
-    textAlign: 'center',
-  },
-  success: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 28,
-  },
-  successTitle: {
-    color: light.ink,
-    fontFamily: fonts.serif.bold,
-    fontSize: 21,
-    textAlign: 'center',
-    marginTop: 16,
-  },
-  successBody: {
-    color: light.inkMuted,
-    fontFamily: fonts.sans.regular,
-    fontSize: 13.5,
-    lineHeight: 20,
+    color: colors.charcoal,
     textAlign: 'center',
     marginTop: 8,
   },
-  successBtns: {
-    flexDirection: 'row',
-    gap: 10,
-    marginTop: 22,
+  uploadBoxHint: {
+    fontFamily: fonts.sans.regular,
+    fontSize: 11.5,
+    color: colors.textMuted,
+    marginTop: 4,
   },
-  ghostBtn: {
-    height: 46,
-    paddingHorizontal: 18,
-    borderRadius: 999,
+  summaryColumn: {
+    position: 'relative',
+  },
+  summaryCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: radius.xl,
     borderWidth: 1,
-    borderColor: light.lineStrong,
+    borderColor: colors.cardBorder,
+    padding: 24,
+    ...shadow.medium,
+  },
+  summaryTitle: {
+    fontFamily: fonts.serif.bold,
+    fontSize: 20,
+    color: colors.charcoal,
+    marginBottom: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.cardBorder,
+  },
+  summaryList: {
+    gap: 10,
+    marginBottom: 18,
+  },
+  summaryItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: 8,
+  },
+  summaryItemLabel: {
+    fontFamily: fonts.sans.regular,
+    fontSize: 13,
+    color: colors.textSecondary,
+  },
+  summaryItemVal: {
+    fontFamily: fonts.sans.medium,
+    fontSize: 13,
+    color: colors.charcoal,
+    textAlign: 'right',
+    flex: 1,
+  },
+  craftTimeBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: '#FFF8E8',
+    borderRadius: radius.md,
+    padding: 12,
+    marginBottom: 18,
+  },
+  craftTimeTitle: {
+    fontFamily: fonts.sans.bold,
+    fontSize: 11.5,
+    letterSpacing: 0.5,
+    color: colors.goldDeep,
+  },
+  craftTimeText: {
+    fontFamily: fonts.sans.regular,
+    fontSize: 12.5,
+    color: colors.charcoal,
+    marginTop: 1,
+  },
+  summaryQuantityRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 18,
+  },
+  summaryQuantityLabel: {
+    fontFamily: fonts.sans.medium,
+    fontSize: 13.5,
+    color: colors.charcoal,
+  },
+  quantityControl: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.marketplaceBg,
+    borderRadius: radius.full,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    paddingHorizontal: 4,
+  },
+  qtyBtn: {
+    width: 32,
+    height: 32,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  ghostBtnText: {
-    color: light.ink,
-    fontFamily: fonts.sans.semibold,
-    fontSize: 13.5,
+  qtyText: {
+    fontFamily: fonts.sans.bold,
+    fontSize: 14,
+    paddingHorizontal: 8,
+    color: colors.charcoal,
   },
-  goldBtn: {
-    height: 46,
-    paddingHorizontal: 22,
-    borderRadius: 999,
-    backgroundColor: colors.goldGradientStart,
+  summaryTotalRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: colors.cardBorder,
+    marginBottom: 20,
+  },
+  summaryTotalLabel: {
+    fontFamily: fonts.sans.bold,
+    fontSize: 16,
+    color: colors.charcoal,
+  },
+  summaryTotalValue: {
+    fontFamily: fonts.sans.bold,
+    fontSize: 26,
+    color: colors.charcoal,
+  },
+  submitCta: {
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 8,
+    backgroundColor: colors.charcoal,
+    height: 50,
+    borderRadius: radius.md,
+    ...shadow.medium,
+    ...(Platform.OS === 'web' ? ({ cursor: 'pointer' } as never) : {}),
   },
-  goldBtnText: {
-    color: colors.buttonText,
+  submitCtaPressed: {
+    backgroundColor: colors.gold,
+  },
+  submitCtaText: {
     fontFamily: fonts.sans.semibold,
-    fontSize: 13.5,
+    fontSize: 14.5,
+    color: '#FFFFFF',
+  },
+  satisfactionNote: {
+    fontFamily: fonts.sans.regular,
+    fontSize: 11.5,
+    lineHeight: 16,
+    color: colors.textMuted,
+    textAlign: 'center',
+    marginTop: 14,
   },
 });

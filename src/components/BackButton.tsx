@@ -1,55 +1,109 @@
-import { Pressable, StyleSheet } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
-import { colors, light } from '../theme';
+import type { AppStackParamList } from '../navigation/types';
+import { colors, fonts, radius } from '../theme';
 
 interface BackButtonProps {
-  dark?: boolean;
-  fallback?: () => void;
+  label?: string;
+  fallbackRoute?: keyof AppStackParamList;
+  onPress?: () => void;
+  variant?: 'light' | 'dark' | 'transparent';
 }
 
-export function BackButton({ dark = false, fallback }: BackButtonProps) {
-  const navigation = useNavigation();
+export function BackButton({
+  label,
+  fallbackRoute = 'CustomerHome',
+  onPress,
+  variant = 'light',
+}: BackButtonProps) {
+  const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList>>();
 
-  const goBack = () => {
+  const handlePress = () => {
+    if (onPress) {
+      onPress();
+      return;
+    }
+
     if (navigation.canGoBack()) {
       navigation.goBack();
     } else {
-      fallback?.();
+      navigation.navigate(fallbackRoute as never);
     }
   };
 
+  const isDark = variant === 'dark';
+
   return (
     <Pressable
-      onPress={goBack}
-      hitSlop={10}
-      style={({ pressed }) => [
-        styles.btn,
-        dark && styles.btnDark,
-        pressed && { opacity: 0.65 },
-      ]}
+      onPress={handlePress}
       accessibilityRole="button"
-      accessibilityLabel="Go back"
+      accessibilityLabel={label ? `Back, ${label}` : 'Go back'}
+      style={({ pressed }) => [
+        styles.button,
+        isDark ? styles.buttonDark : styles.buttonLight,
+        pressed && styles.pressed,
+      ]}
     >
-      <Ionicons name="arrow-back" size={20} color={dark ? colors.cream : light.ink} />
+      <View style={styles.contentRow}>
+        <Ionicons
+          name="arrow-back"
+          size={18}
+          color={isDark ? colors.cream : colors.charcoal}
+        />
+        {label ? (
+          <Text
+            style={[
+              styles.labelText,
+              { color: isDark ? colors.cream : colors.charcoal },
+            ]}
+          >
+            {label}
+          </Text>
+        ) : null}
+      </View>
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  btn: {
-    width: 38,
+  button: {
     height: 38,
-    borderRadius: 19,
-    borderWidth: 1,
-    borderColor: light.lineStrong,
-    backgroundColor: light.surface,
+    borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
+    paddingHorizontal: 12,
+    ...(Platform.OS === 'web'
+      ? ({
+          cursor: 'pointer',
+          userSelect: 'none',
+          transition: 'all 0.15s ease',
+        } as never)
+      : {}),
   },
-  btnDark: {
+  buttonLight: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+  },
+  buttonDark: {
+    backgroundColor: colors.charcoalSoft,
+    borderWidth: 1,
     borderColor: colors.goldDim,
-    backgroundColor: 'rgba(55, 35, 23, 0.5)',
+  },
+  contentRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  labelText: {
+    fontFamily: fonts.sans.medium,
+    fontSize: 13.5,
+  },
+  pressed: {
+    opacity: 0.7,
+    transform: [{ scale: 0.98 }],
   },
 });

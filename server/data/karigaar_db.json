@@ -42,6 +42,27 @@
       "termsAccepted": true,
       "createdAt": "2026-10-18T18:21:45.718Z",
       "updatedAt": "2026-10-18T18:21:45.718Z"
+    },
+    {
+      "id": "usr_mvxgr32v_xlw9",
+      "fullName": "Google Craft Explorer",
+      "email": "artisan.google@kaarigaar.in",
+      "mobile": "9990001122",
+      "passwordHash": "2f78715b542cf53467ddb3c7fb97f5d6:be086c123d1527d09d8acd1a41171dad1177b64c32a1300b51d50ec0fe9f208137d839dd96f3bc2eb232a38fe153d92c88e091896bd512646826bc6b8cc31d94",
+      "role": "customer",
+      "roles": [
+        "customer"
+      ],
+      "profilePhoto": "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80",
+      "isEmailVerified": true,
+      "isMobileVerified": true,
+      "verificationOtp": null,
+      "otpExpiresAt": null,
+      "resetToken": null,
+      "resetTokenExpiresAt": null,
+      "termsAccepted": true,
+      "createdAt": "2026-11-01T06:43:03.896Z",
+      "updatedAt": "2026-11-01T06:43:03.896Z"
     }
   ],
   "creatorProfiles": [
@@ -105,6 +126,18 @@
         "newsletter": true
       },
       "createdAt": "2026-10-18T18:21:45.718Z"
+    },
+    {
+      "userId": "usr_mvxgr32v_xlw9",
+      "addresses": [],
+      "preferences": {
+        "favoriteCategories": [
+          "crochet",
+          "pottery"
+        ],
+        "newsletter": true
+      },
+      "createdAt": "2026-11-01T06:43:03.898Z"
     }
   ]
 }
