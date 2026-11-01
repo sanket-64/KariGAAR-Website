@@ -4,7 +4,7 @@ console.log('=======================================================');
 console.log(' Starting KARIGAAR Full-Stack Marketplace');
 console.log('=======================================================');
 
-const server = spawn('node', ['server/server.js'], {
+const server = spawn('node', ['server/src/index.js'], {
   stdio: 'inherit',
   shell: true,
 });

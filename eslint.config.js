@@ -5,6 +5,16 @@ const expoConfig = require("eslint-config-expo/flat");
 module.exports = defineConfig([
   expoConfig,
   {
-    ignores: ["dist/*"],
+    ignores: [
+      "dist/*",
+      "archive_pre_k2/*",
+      "KAARIGAAR-2.0-main/*",
+      "The KariGAAR Platform/*",
+      "The-KariGAAR-Platform/*",
+      "server/*",
+    ],
+    rules: {
+      "react-hooks/set-state-in-effect": "warn",
+    },
   }
 ]);
